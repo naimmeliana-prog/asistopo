@@ -213,7 +213,7 @@ async function fetchBoeRealSearch(query: string): Promise<any[]> {
     }
 
     const url = `https://www.boe.es/buscar/xml.php?${params.toString()}`;
-9f69e27eed8b575146b2dae653e414a35cd173af
+
     console.log("Fetching real BOE search from URL:", url);
     const response = await fetch(url, {
       headers: {

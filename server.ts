@@ -198,15 +198,21 @@ function cleanXmlText(str: string): string {
 // Helper function to fetch real search results from the BOE XML search engine
 async function fetchBoeRealSearch(query: string): Promise<any[]> {
   try {
-    let url = "";
+    const params = new URLSearchParams();
     if (query.trim()) {
       // Use BOE's XML search engine to query Section II.B (Oposiciones y concursos) by Title matching the keyword
-      url = `https://www.boe.es/buscar/xml.php?campo[0]=TIT&dato[0]=${encodeURIComponent(query.trim())}&operador[0]=and&campo[1]=SEC&dato[1]=2b`;
+      params.set("campo[0]", "TIT");
+      params.set("dato[0]", query.trim());
+      params.set("operador[0]", "and");
+      params.set("campo[1]", "SEC");
+      params.set("dato[1]", "2b");
     } else {
       // If no query, just pull general recent items from Section II.B
-      url = `https://www.boe.es/buscar/xml.php?campo[0]=SEC&dato[0]=2b`;
+      params.set("campo[0]", "SEC");
+      params.set("dato[0]", "2b");
     }
 
+    const url = `https://www.boe.es/buscar/xml.php?${params.toString()}`;
     console.log("Fetching real BOE search from URL:", url);
     const response = await fetch(url, {
       headers: {

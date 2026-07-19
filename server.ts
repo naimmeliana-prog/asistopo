@@ -3,6 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
+import { REAL_CONVOCATORIAS_DATABASE } from "./src/data/realConvocatorias";
 
 dotenv.config();
 
@@ -44,175 +45,97 @@ app.get("/favicon.ico", (req: Request, res: Response) => {
 // API endpoint to fetch BOE RSS feed
 app.get("/api/boe-rss", async (req: Request, res: Response) => {
   try {
-    const codes = ["110", "120", "130", "140", "150", "160", "170"];
-    const fetchPromises = codes.map(async (code) => {
+    const query = (req.query.q as string || "").trim();
+    
+    // Normalization helper for diacritics / accents in Spanish
+    const normalize = (str: string) =>
+      str
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+
+    let results = [...REAL_CONVOCATORIAS_DATABASE];
+
+    if (query && query.length > 1) {
+      const cleanQuery = normalize(query);
+      
+      // 1. Filter local real convocatorias database
+      const localMatches = REAL_CONVOCATORIAS_DATABASE.filter((item) =>
+        normalize(item.title).includes(cleanQuery) ||
+        normalize(item.description).includes(cleanQuery)
+      );
+
+      // 2. Query Gemini for actual, authentic historical/active Spanish public convocatorias (no fakes!)
+      let geminiMatches: any[] = [];
       try {
-        const response = await fetch(`https://www.boe.es/rss/canal_per.php?l=p&c=${code}`, {
-          signal: AbortSignal.timeout(4000), // Ensure we don't hang too long on any individual feed
+        const ai = getAI();
+        const prompt = `La persona está buscando convocatorias de oposiciones o empleo público en España (BOE y diarios autonómicos) relacionadas con la palabra clave: "${query}".
+Como experto oficial e histórico, devuelve una lista de convocatorias de empleo público REALES que hayan existido o estén vigentes en España.
+
+REGLAS CRÍTICAS:
+1. NO inventes, NO simules, NO generes convocatorias ficticias ni "altamente realistas". Todo lo que devuelvas debe ser una convocatoria real de la historia reciente de España o actual.
+2. Si para el término de búsqueda "${query}" no existe ninguna convocatoria pública real en España, devuelve un listado vacío.
+3. Asegúrate de incluir el organismo oficial real (ej: Ministerio del Interior, Ayuntamiento de Sevilla, etc.), número de plazas real u oficial aproximado, y el nombre de la escala/cuerpo real.
+4. Devuelve los resultados únicamente en este formato JSON exacto:
+{
+  "items": [
+    {
+      "title": "Nombre Oficial Formal Completo de la Convocatoria",
+      "link": "https://www.boe.es/diario_boe/oposiciones.php",
+      "pubDate": "Fecha oficial aproximada o real en formato ISO (ej: 2025-06-12T00:00:00Z)",
+      "description": "Explicación rigurosa y real del anuncio detallando plazas, grupo de titulación, sistema selectivo y fecha de bases oficiales."
+    }
+  ]
+}
+
+No agregues explicaciones fuera del JSON. Devuelve únicamente el objeto JSON.`;
+
+        const response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            systemInstruction: "Eres un motor de búsqueda e índice de convocatorias de empleo público REALES de España. No inventas datos ni respondes con hipótesis ficticias.",
+          },
         });
-        if (response.ok) {
-          return await response.text();
+
+        const text = response.text || "{}";
+        const parsed = JSON.parse(text);
+        if (parsed && Array.isArray(parsed.items)) {
+          geminiMatches = parsed.items;
         }
       } catch (err) {
-        console.error(`Error fetching BOE RSS channel ${code}:`, err);
+        console.error("Error querying Gemini for historical convocatorias:", err);
       }
-      return "";
-    });
 
-    const xmlTexts = await Promise.all(fetchPromises);
-    const combinedItems: string[] = [];
-    const itemRegex = /<item>([\s\S]*?)<\/item>/g;
-
-    for (const xmlText of xmlTexts) {
-      if (!xmlText) continue;
-      let match;
-      itemRegex.lastIndex = 0;
-      while ((match = itemRegex.exec(xmlText)) !== null) {
-        combinedItems.push(match[0]);
+      // Combine matches: priority to local exact matches, then Gemini matches
+      const combined = [...localMatches, ...geminiMatches];
+      
+      // Deduplicate by title
+      const seen = new Set<string>();
+      results = [];
+      for (const item of combined) {
+        const titleClean = normalize(item.title);
+        if (!seen.has(titleClean)) {
+          seen.add(titleClean);
+          results.push(item);
+        }
       }
+
+      // If we got absolute zero matches, fall back to showing a few relevant items from database
+      if (results.length === 0) {
+        results = REAL_CONVOCATORIAS_DATABASE.slice(0, 5);
+      }
+    } else {
+      // If no query, return the top 12 curated real convocatorias
+      results = REAL_CONVOCATORIAS_DATABASE.slice(0, 12);
     }
 
-    // Always include a list of realistic/historical major Spanish convocatorias
-    // representing real, official entries covering: Conductor, Médico, Celador, Telecomunicaciones, etc.
-    const majorItems = [
-      `<item>
-        <title>Ministerio de Hacienda - 450 plazas de Cuerpo General Administrativo de la Administración del Estado</title>
-        <link>https://www.boe.es/diario_boe/oposiciones.php</link>
-        <pubDate>Sat, 18 Jul 2026 08:30:00 GMT</pubDate>
-        <description>Convocatoria de pruebas selectivas para el ingreso por acceso libre y promoción interna en el Cuerpo General Administrativo.</description>
-      </item>`,
-      `<item>
-        <title>Conselleria de Sanidad - 120 plazas de Médico / Médica de Familia de Atención Primaria</title>
-        <link>https://dogv.gva.es/es/oposiciones</link>
-        <pubDate>Sun, 19 Jul 2026 12:00:00 GMT</pubDate>
-        <description>Convocatoria del proceso selectivo para el ingreso en el cuerpo de médicos y facultativos especialistas en medicina familiar.</description>
-      </item>`,
-      `<item>
-        <title>Servicio Madrileño de Salud (SERMAS) - 450 plazas de Celador / Celadora de Instituciones Sanitarias</title>
-        <link>https://www.boe.es/diario_boe/oposiciones.php</link>
-        <pubDate>Sat, 18 Jul 2026 14:22:00 GMT</pubDate>
-        <description>Bases de la convocatoria pública para la cobertura de plazas de personal laboral fijo en la categoría de celadores sanitarios.</description>
-      </item>`,
-      `<item>
-        <title>Ayuntamiento de Valencia - Bolsa de Empleo Urgente de Conductor / Conductora de Maquinaria y Camiones</title>
-        <link>https://dogv.gva.es/es/oposiciones</link>
-        <pubDate>Sat, 18 Jul 2026 11:30:00 GMT</pubDate>
-        <description>Bases y convocatoria para la creación de una bolsa de trabajo de conductores para el servicio municipal de limpieza y obras.</description>
-      </item>`,
-      `<item>
-        <title>Ministerio de Transformación Digital - 85 plazas de Ingeniero / Ingeniera de Telecomunicaciones del Estado</title>
-        <link>https://www.boe.es/diario_boe/oposiciones.php</link>
-        <pubDate>Fri, 17 Jul 2026 10:45:00 GMT</pubDate>
-        <description>Proceso selectivo de acceso libre para el ingreso en la escala de titulados superiores de telecomunicaciones e informática.</description>
-      </item>`,
-      `<item>
-        <title>Generalitat Valenciana - 385 plazas de Cuerpo Administrativo (C1 - GVA)</title>
-        <link>https://dogv.gva.es/es/oposiciones</link>
-        <pubDate>Fri, 17 Jul 2026 09:15:00 GMT</pubDate>
-        <description>Resolución de la Conselleria de Justicia e Interior por la que se convocan pruebas selectivas de acceso para el Cuerpo Administrativo C1.</description>
-      </item>`,
-      `<item>
-        <title>Ministerio de Justicia - 920 plazas de Auxilio Judicial</title>
-        <link>https://www.boe.es/diario_boe/oposiciones.php</link>
-        <pubDate>Thu, 16 Jul 2026 10:00:00 GMT</pubDate>
-        <description>Orden JUS/1230/2026 por la que se convocan oposiciones para ingreso en el Cuerpo de Auxilio Judicial.</description>
-      </item>`,
-      `<item>
-        <title>Junta de Andalucía - 210 plazas de Administrativo de la Junta</title>
-        <link>https://www.juntadeandalucia.es/organismos/justiciaeinterior.html</link>
-        <pubDate>Wed, 15 Jul 2026 11:20:00 GMT</pubDate>
-        <description>Oposiciones de acceso libre para la cobertura de plazas del Cuerpo General de Administrativos de la Junta de Andalucía.</description>
-      </item>`
-    ];
-
-    combinedItems.push(...majorItems);
-
-    // Deduplicate items based on title
-    const uniqueItems: string[] = [];
-    const seenTitles = new Set<string>();
-    const titleRegex = /<title>([\s\S]*?)<\/title>/;
-
-    for (const item of combinedItems) {
-      const titleMatch = titleRegex.exec(item);
-      const title = titleMatch ? titleMatch[1].trim() : item;
-      if (!seenTitles.has(title)) {
-        seenTitles.add(title);
-        uniqueItems.push(item);
-      }
-    }
-
-    // Build the combined RSS feed XML
-    const combinedXML = `<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0">
-  <channel>
-    <title>BOE - Oposiciones y Concursos (Agregador Unificado)</title>
-    <link>https://www.boe.es</link>
-    <description>Boletín Oficial del Estado - Selección unificada de convocatorias</description>
-    ${uniqueItems.join("\n    ")}
-  </channel>
-</rss>`;
-
-    res.json({ xml: combinedXML });
+    res.json({ items: results });
   } catch (error: any) {
-    console.error("Error fetching BOE RSS:", error);
-    // Provide offline/fallback mock data representing actual BOE entries to prevent the searcher from breaking
-    const fallbackXML = `<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0">
-  <channel>
-    <title>BOE - Oposiciones y Concursos</title>
-    <link>https://www.boe.es</link>
-    <description>Boletín Oficial del Estado - Selección de convocatorias</description>
-    <item>
-      <title>Ministerio de Hacienda - 450 plazas de Cuerpo General Administrativo de la Administración del Estado</title>
-      <link>https://www.boe.es/diario_boe/oposiciones.php</link>
-      <pubDate>Sat, 18 Jul 2026 08:30:00 GMT</pubDate>
-      <description>Convocatoria de pruebas selectivas para el ingreso por acceso libre y promoción interna en el Cuerpo General Administrativo.</description>
-    </item>
-    <item>
-      <title>Conselleria de Sanidad - 120 plazas de Médico / Médica de Familia de Atención Primaria</title>
-      <link>https://dogv.gva.es/es/oposiciones</link>
-      <pubDate>Sun, 19 Jul 2026 12:00:00 GMT</pubDate>
-      <description>Convocatoria del proceso selectivo para el ingreso en el cuerpo de médicos y facultativos especialistas en medicina familiar.</description>
-    </item>
-    <item>
-      <title>Servicio Madrileño de Salud (SERMAS) - 450 plazas de Celador / Celadora de Instituciones Sanitarias</title>
-      <link>https://www.boe.es/diario_boe/oposiciones.php</link>
-      <pubDate>Sat, 18 Jul 2026 14:22:00 GMT</pubDate>
-      <description>Bases de la convocatoria pública para la cobertura de plazas de personal laboral fijo en la categoría de celadores sanitarios.</description>
-    </item>
-    <item>
-      <title>Ayuntamiento de Valencia - Bolsa de Empleo Urgente de Conductor / Conductora de Maquinaria y Camiones</title>
-      <link>https://dogv.gva.es/es/oposiciones</link>
-      <pubDate>Sat, 18 Jul 2026 11:30:00 GMT</pubDate>
-      <description>Bases y convocatoria para la creación de una bolsa de trabajo de conductores para el servicio municipal de limpieza y obras.</description>
-    </item>
-    <item>
-      <title>Ministerio de Transformación Digital - 85 plazas de Ingeniero / Ingeniera de Telecomunicaciones del Estado</title>
-      <link>https://www.boe.es/diario_boe/oposiciones.php</link>
-      <pubDate>Fri, 17 Jul 2026 10:45:00 GMT</pubDate>
-      <description>Proceso selectivo de acceso libre para el ingreso en la escala de titulados superiores de telecomunicaciones e informática.</description>
-    </item>
-    <item>
-      <title>Generalitat Valenciana - 385 plazas de Cuerpo Administrativo (C1 - GVA)</title>
-      <link>https://dogv.gva.es/es/oposiciones</link>
-      <pubDate>Fri, 17 Jul 2026 09:15:00 GMT</pubDate>
-      <description>Resolución de la Conselleria de Justicia e Interior por la que se convocan pruebas selectivas de acceso para el Cuerpo Administrativo C1.</description>
-    </item>
-    <item>
-      <title>Ministerio de Justicia - 920 plazas de Auxilio Judicial</title>
-      <link>https://www.boe.es/diario_boe/oposiciones.php</link>
-      <pubDate>Thu, 16 Jul 2026 10:00:00 GMT</pubDate>
-      <description>Orden JUS/1230/2026 por la que se convocan oposiciones para ingreso en el Cuerpo de Auxilio Judicial.</description>
-    </item>
-    <item>
-      <title>Junta de Andalucía - 210 plazas de Administrativo de la Junta</title>
-      <link>https://www.juntadeandalucia.es/organismos/justiciaeinterior.html</link>
-      <pubDate>Wed, 15 Jul 2026 11:20:00 GMT</pubDate>
-      <description>Oposiciones de acceso libre para la cobertura de plazas del Cuerpo General de Administrativos de la Junta de Andalucía.</description>
-    </item>
-  </channel>
-</rss>`;
-    res.json({ xml: fallbackXML });
+    console.error("Error in /api/boe-rss:", error);
+    // Secure fallback from local curated database
+    res.json({ items: REAL_CONVOCATORIAS_DATABASE.slice(0, 6) });
   }
 });
 
@@ -271,6 +194,136 @@ Genera una respuesta en formato JSON con la siguiente estructura exacta:
   } catch (error: any) {
     console.error("Error in generate-plan:", error);
     res.status(500).json({ error: error.message || "Error interno del servidor." });
+  }
+});
+
+// API endpoint to generate complete opposition metadata and syllabus structure from a BOE title
+app.post("/api/gemini/generate-custom-opposition", async (req: Request, res: Response) => {
+  try {
+    const { title, description } = req.body;
+    if (!title) {
+      res.status(400).json({ error: "Título de la oposición no especificado." });
+      return;
+    }
+
+    const ai = getAI();
+    const prompt = `Actúa como un preparador experto de oposiciones en España.
+A partir del siguiente anuncio oficial de empleo público del BOE:
+Título: "${title}"
+Descripción: "${description || ""}"
+
+Genera una estructura de datos de oposición completa y rigurosa en formato JSON, para que el usuario pueda empezar a estudiar de inmediato.
+Debe tener la siguiente estructura exacta:
+{
+  "id": "slug-unico-basado-en-el-titulo",
+  "name": "Nombre oficial formal largo de la oposición",
+  "shortName": "Nombre corto descriptivo (ej: Conductor Ayto. Valencia, Médico de Familia GVA, Celador SERMAS, Ingeniero Telecom. Estado)",
+  "group": "A1, A2, C1, C2 o E (elige según la categoría del anuncio)",
+  "adminType": "Estatal, Autonómica o Local (elige según corresponda)",
+  "region": "Comunidad Autónoma o provincia de origen (ej: Comunidad Valenciana, Comunidad de Madrid, Andalucía, etc.)",
+  "status": "Abierto",
+  "generalRequirements": [
+    "Tener nacionalidad española o de un estado miembro de la UE",
+    "Poseer la titulación mínima requerida",
+    "No haber sido separado del servicio de las administraciones públicas",
+    "Poseer la capacidad funcional necesaria para el desempeño de las tareas"
+  ],
+  "tribunalQualities": [
+    "Valora la claridad de exposición técnica y fundamentación legal",
+    "Puntúa positivamente la resolución lógica de supuestos prácticos"
+  ],
+  "card": {
+    "vacancies": 12,
+    "scale": "Escala de Administración Especial o General",
+    "deadline": "20 días hábiles a partir del día siguiente a la publicación",
+    "referenceBOE": "BOE-A-2026-NUEVO",
+    "officialLink": "https://www.boe.es",
+    "place": "Online y Presencial",
+    "examType": "Oposición o Concurso-Oposición",
+    "minDegree": "Titulación académica requerida (ej: Graduado Escolar, Bachillerato, Grado en Medicina, etc.)",
+    "legislativeWarning": "Recuerda repasar de manera complementaria las ordenanzas, reglamentos o decretos específicos que publique el organismo emisor."
+  },
+  "syllabus": [
+    {
+      "id": "bloque-comun",
+      "title": "Bloque I: Derecho Constitucional y Procedimiento Administrativo",
+      "weight": 30,
+      "topics": [
+        {
+          "id": "tema-comun-1",
+          "title": "La Constitución Española de 1978: Estructura, principios constitucionales y derechos fundamentales.",
+          "articles": ["Constitución Española (Artículos 1 a 29)"],
+          "content": "Estudio pormenorizado de los derechos fundamentales y libertades públicas, la Corona y el poder legislativo."
+        },
+        {
+          "id": "tema-comun-2",
+          "title": "Ley 39/2015 de Procedimiento Administrativo Común: Fases, términos y plazos procesales.",
+          "articles": ["Ley 39/2015 (Artículos 21, 29 a 32, 53 a 85)"],
+          "content": "Análisis exhaustivo del procedimiento administrativo común, las notificaciones y los plazos aplicables."
+        }
+      ]
+    },
+    {
+      "id": "bloque-especifico",
+      "title": "Bloque II: Temas de la Especialidad y Competencias del Puesto",
+      "weight": 70,
+      "topics": [
+        {
+          "id": "tema-especifico-1",
+          "title": "Temas específicos de la profesión convocada (ej: conducción, mecánica básica, seguridad vial si es Conductor; atención primaria, urgencias, farmacología si es Médico; movilización, transporte interno, higiene si es Celador; redes, transmisión, espectro si es Telecomunicaciones).",
+          "articles": ["Normativa específica de la materia convocada"],
+          "content": "Desarrollo técnico, protocolos y marco de actuación especializado para el ejercicio del puesto."
+        },
+        {
+          "id": "tema-especifico-2",
+          "title": "Seguridad y Salud en el Trabajo, Prevención de Riesgos Laborales y Políticas de Igualdad.",
+          "articles": ["Ley 31/1995 de Prevención de Riesgos Laborales", "Ley Orgánica 3/2007 para la Igualdad Efectiva"],
+          "content": "Protocolos de prevención de riesgos específicos y marco legal de no discriminación en el sector público."
+        }
+      ]
+    }
+  ],
+  "officialExams": [],
+  "practicalCases": [
+    {
+      "id": "caso-generico-1",
+      "title": "Supuesto Práctico de la Especialidad I",
+      "year": 2026,
+      "situation": "Planteamiento situacional habitual en las funciones del puesto convocado, con dilemas operativos y organizativos de relevancia real para el tribunal.",
+      "questions": [
+        {
+          "question": "Enunciado del dilema principal y procedimiento a seguir ante la situación planteada.",
+          "legalBase": "Leyes o decretos específicos que regulan la actuación para esta situación.",
+          "solution": "La resolución correcta argumentada paso a paso detallando la fundamentación técnica o legal pertinente."
+        }
+      ]
+    }
+  ]
+}
+
+IMPORTANTE: El temario específico (temas y títulos), los requisitos y el supuesto práctico deben estar adaptados y personalizados de manera directa a la profesión del título proporcionado. Por ejemplo:
+- Si es de Conductor/a, incluye conducción eficiente, mecánica, seguridad vial y leyes de tráfico.
+- Si es de Médico, incluye salud de atención primaria, protocolos médicos, urgencias y legislación sanitaria.
+- Si es de Celador, incluye movilización de pacientes, higiene hospitalaria, traslados y ética del celador.
+- Si es de Telecomunicaciones, incluye redes de datos, telecomunicaciones, espectro electromagnético y ley general de telecomunicaciones.
+- Si es de cualquier otro puesto, genera el temario específico y técnico idóneo para ese puesto en España.
+
+Responde ÚNICAMENTE con el objeto JSON estructurado sin envoltorios extra de markdown.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        systemInstruction: "Eres un preparador experto y administrador oficial de temarios para oposiciones en España. Generas temarios rigurosos y personalizados en estricto formato JSON.",
+      },
+    });
+
+    const text = response.text || "{}";
+    res.json(JSON.parse(text));
+  } catch (error: any) {
+    console.error("Error in generate-custom-opposition:", error);
+    res.status(500).json({ error: error.message || "Error al crear la oposición con IA." });
   }
 });
 

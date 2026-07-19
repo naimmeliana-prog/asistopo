@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { OppositionData } from "../types";
-import { Search, Filter, RefreshCw, ExternalLink, Calendar, MapPin, Layers, Wifi, AlertTriangle } from "lucide-react";
+import { Search, Filter, RefreshCw, ExternalLink, Calendar, MapPin, Layers, Wifi, AlertTriangle, Sparkles, Loader2, CheckCircle } from "lucide-react";
 
 interface RSSItem {
   title: string;
@@ -39,29 +39,80 @@ export default function OppositionSearcher({
   const [loadingRss, setLoadingRss] = useState(false);
   const [rssError, setRssError] = useState("");
 
-  // Custom opposition import removed per user request (no offline DB enrichment via IA)
+  // Custom opposition import
+  const [importingTitle, setImportingTitle] = useState<string | null>(null);
+  const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
 
-  const fetchRssFeed = async () => {
+  const handleImportOpposition = async (item: RSSItem) => {
+    setImportingTitle(item.title);
+    setImportSuccessMessage(null);
+    try {
+      const response = await fetch("/api/gemini/generate-custom-opposition", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: item.title, description: item.description }),
+      });
+      if (!response.ok) {
+        throw new Error("No se pudo generar la oposición.");
+      }
+      const data = await response.json();
+      
+      if (!data.id) {
+        data.id = normalizeString(item.title)
+          .replace(/[^a-zA-Z0-9\s-]/g, "")
+          .trim()
+          .replace(/\s+/g, "-")
+          .toLowerCase()
+          .slice(0, 50);
+      }
+      
+      onAddCustomOpposition(data);
+      setImportSuccessMessage(`¡Éxito! "${data.shortName || data.name}" se ha añadido al Catálogo Local y se ha seleccionado automáticamente para su estudio.`);
+      
+      // Auto-select immediately
+      onSelectOpposition(data.id);
+      
+      // Clear success message after 5 seconds
+      setTimeout(() => {
+        setImportSuccessMessage(null);
+      }, 5000);
+    } catch (err: any) {
+      console.error(err);
+      alert("Hubo un error al generar la oposición con IA: " + err.message);
+    } finally {
+      setImportingTitle(null);
+    }
+  };
+
+  const fetchRssFeed = async (searchQuery: any = "") => {
     setLoadingRss(true);
     setRssError("");
     try {
-      const response = await fetch("/api/boe-rss");
+      const actualQuery = typeof searchQuery === "string" ? searchQuery.trim() : searchTerm.trim();
+      const url = actualQuery
+        ? `/api/boe-rss?q=${encodeURIComponent(actualQuery)}`
+        : "/api/boe-rss";
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error("No se pudo obtener el feed de BOE.");
       }
       const data = await response.json();
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(data.xml, "text/xml");
-      const xmlItems = xmlDoc.querySelectorAll("item");
-      const parsedItems: RSSItem[] = [];
-      xmlItems.forEach((item) => {
-        const title = item.querySelector("title")?.textContent || "";
-        const link = item.querySelector("link")?.textContent || "";
-        const pubDate = item.querySelector("pubDate")?.textContent || "";
-        const description = item.querySelector("description")?.textContent || "";
-        parsedItems.push({ title, link, pubDate, description });
-      });
-      setRssItems(parsedItems);
+      if (data && Array.isArray(data.items)) {
+        setRssItems(data.items);
+      } else if (data && typeof data.xml === "string") {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(data.xml, "text/xml");
+        const xmlItems = xmlDoc.querySelectorAll("item");
+        const parsedItems: RSSItem[] = [];
+        xmlItems.forEach((item) => {
+          const title = item.querySelector("title")?.textContent || "";
+          const link = item.querySelector("link")?.textContent || "";
+          const pubDate = item.querySelector("pubDate")?.textContent || "";
+          const description = item.querySelector("description")?.textContent || "";
+          parsedItems.push({ title, link, pubDate, description });
+        });
+        setRssItems(parsedItems);
+      }
     } catch (err: any) {
       console.error(err);
       setRssError("Error al conectar con la fuente oficial en tiempo real. Mostrando modo offline.");
@@ -71,10 +122,13 @@ export default function OppositionSearcher({
   };
 
   useEffect(() => {
-    if (activeTab === "realtime" && rssItems.length === 0) {
-      fetchRssFeed();
+    if (activeTab === "realtime") {
+      const delayDebounceFn = setTimeout(() => {
+        fetchRssFeed(searchTerm);
+      }, 600); // 600ms debounce
+      return () => clearTimeout(delayDebounceFn);
     }
-  }, [activeTab]);
+  }, [searchTerm, activeTab]);
 
   // Accent and diacritic-insensitive normalization for Spanish searches
   const normalizeString = (str: string): string => {
@@ -645,7 +699,12 @@ export default function OppositionSearcher({
             )}
           </div>
 
-          {/* Custom opposition import notification removed per user request */}
+          {importSuccessMessage && (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs flex items-start gap-3 shadow-xs">
+              <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <span className="font-semibold leading-relaxed">{importSuccessMessage}</span>
+            </div>
+          )}
 
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -697,6 +756,30 @@ export default function OppositionSearcher({
                           {item.description}
                         </p>
                       )}
+                      
+                      <div className="flex items-center justify-between pt-1 flex-wrap gap-2 border-t border-gray-50 pt-3">
+                        <span className="text-[10px] text-gray-400 font-semibold italic">
+                          ID: {item.title.toLowerCase().includes("médico") ? "Sanidad" : item.title.toLowerCase().includes("conductor") ? "Servicios" : "General"}
+                        </span>
+                        <button
+                          id={`btn-import-opo-${index}`}
+                          disabled={importingTitle !== null}
+                          onClick={() => handleImportOpposition(item)}
+                          className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm hover:shadow-md disabled:cursor-not-allowed"
+                        >
+                          {importingTitle === item.title ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                              <span>Generando Temario...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-3.5 h-3.5 text-indigo-200" />
+                              <span>Estudiar con IA (Generar Temario)</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   );
                 })}

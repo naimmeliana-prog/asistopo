@@ -28,6 +28,42 @@ export default function StatisticalAnalysis({ opposition, progress }: Statistica
     }));
   }, [opposition]);
 
+  const strategicAdvisories = useMemo(() => {
+    const title = opposition.name.toLowerCase();
+    
+    // Find highest weight block
+    let highestWeightBlock = opposition.syllabus[0] || { title: "General", weight: 35 };
+    for (const block of opposition.syllabus) {
+      if (block.weight > highestWeightBlock.weight) {
+        highestWeightBlock = block;
+      }
+    }
+    
+    const blockShortName = highestWeightBlock.title.split(":")[0];
+    
+    let paretoAdvice = `El bloque "${blockShortName}" concentra el ${highestWeightBlock.weight}% del total del examen oficial. Prioriza este bloque realizando simulacros de examen enfocados.`;
+    let focusAdvice = "Estudia detenidamente el articulado de cabecera de este temario, ya que el tribunal de selección suele preguntar sobre las excepciones y plazos de las leyes generales.";
+
+    if (title.includes("bombero") || title.includes("fuego") || title.includes("incendio")) {
+      paretoAdvice = `El bloque técnico específico de Bomberos y sus ordenanzas físicas y químicas del fuego concentran el ${highestWeightBlock.weight}% de las preguntas. Domina la física de fluidos y los protocolos de seguridad ciudadana.`;
+      focusAdvice = "Atención especial a la normativa de prevención y protección civil local y planes territoriales de emergencia autonómicos.";
+    } else if (title.includes("policia") || title.includes("seguridad") || title.includes("civil") || title.includes("guardia")) {
+      paretoAdvice = `El bloque de Ciencias Policiales, Derecho Penal y los principios de la LO 2/1986 concentran la mayor carga lectiva (${highestWeightBlock.weight}%). Dedica 2 de cada 5 horas a repasar las causas de justificación y derechos de detenidos.`;
+      focusAdvice = "La legislación de Seguridad Ciudadana y el Código Penal actualizado son de obligada memorización literal para evitar las trampas habituales.";
+    } else if (title.includes("correos") || title.includes("postal")) {
+      paretoAdvice = `El bloque técnico de envíos, embalajes y el Servicio Postal Universal agrupa más del 55% de las preguntas reales. Centra tu estudio en los pesos de los envíos, plazos de conservación en oficina y tarifas de entrega.`;
+      focusAdvice = "No pases por alto las reformas postales de Correos relativas a envíos digitales y paquetería de comercio electrónico internacional.";
+    } else if (title.includes("sanidad") || title.includes("salud") || title.includes("celador") || title.includes("enfermer")) {
+      paretoAdvice = `Las leyes específicas del Servicio de Salud (como el Estatuto Marco de personal estatutario y leyes de salud) representan más de la mitad del test. Prioriza el estudio de derechos y deberes de los pacientes.`;
+      focusAdvice = "Presta especial atención a la normativa de prevención de riesgos laborales hospitalarios y protocolos de movilización de pacientes.";
+    } else if (title.includes("justicia") || title.includes("tramitacion") || title.includes("auxilio") || title.includes("procesal")) {
+      paretoAdvice = "Los temas de derecho procesal civil y penal en la LOPJ concentran más del 65% del examen tipo test de justicia. Prioriza memorizar la tramitación de recursos, providencias y plazos de ejecución civil.";
+      focusAdvice = "La LEC y la LOPJ sufren reformas recurrentes (como la desjudicialización del Registro Civil). Evita estudiar con apuntes anteriores a 2024.";
+    }
+    
+    return { paretoAdvice, focusAdvice };
+  }, [opposition]);
+
   return (
     <div id="statistical-analysis" className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
@@ -149,14 +185,14 @@ export default function StatisticalAnalysis({ opposition, progress }: Statistica
               <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700/50 space-y-1">
                 <span className="font-bold text-indigo-300 block">Estrategia Pareto (80/20):</span>
                 <p className="text-slate-300 leading-normal">
-                  Los temas relativos a procedimientos judiciales directos y plazos administrativos concentran más del 65% del examen tipo test. Prioriza resolver simulacros prácticos sobre estos bloques.
+                  {strategicAdvisories.paretoAdvice}
                 </p>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700/50 space-y-1">
-                <span className="font-bold text-indigo-300 block">Enfoque de Eficiencia Digital:</span>
+                <span className="font-bold text-indigo-300 block">Enfoque de Eficiencia Temática:</span>
                 <p className="text-slate-300 leading-normal">
-                  Múltiples preguntas del bloque de organización se centrarán en la reforma digital. No utilices temarios previos a 2023.
+                  {strategicAdvisories.focusAdvice}
                 </p>
               </div>
             </div>

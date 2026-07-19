@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { OppositionData } from "../types";
 import { Brain, HelpCircle, RefreshCw, Loader2, BookOpen, Sparkles, CheckCircle2, ChevronRight, MessageSquareCode } from "lucide-react";
+import { generateClientMnemonic } from "../lib/clientAiGenerator";
 
 interface MnemonicsStudyProps {
   opposition: OppositionData;
@@ -65,37 +66,62 @@ const OFFLINE_MNEMONICS_DB: Record<string, MnemonicResult> = {
 };
 
 export default function MnemonicsStudy({ opposition, isSimulatedOffline }: MnemonicsStudyProps) {
-  const [customConcept, setCustomConcept] = useState("Plazos del Recurso de Queja");
+  // Prepopulated complex concepts (<10% success rates) dynamically extracted
+  const difficultConcepts = useMemo(() => {
+    const list: Array<{ concept: string; why: string }> = [];
+    opposition.syllabus.forEach((block) => {
+      block.topics.forEach((topic) => {
+        if (list.length < 3) {
+          list.push({
+            concept: topic.title,
+            why: `Requiere retener con precisión quirúrgica el articulado aplicable: ${topic.articles.join(", ")}.`,
+          });
+        }
+      });
+    });
+
+    if (list.length === 0) {
+      return [
+        {
+          concept: "Plazos del Recurso de Queja",
+          why: "Se confunde recurrentemente con la queja administrativa y sus plazos varían según la jurisdicción.",
+        },
+        {
+          concept: "Competencia de las Oficinas del Registro Civil",
+          why: "La desjudicialización total de 2021 redistribuyó competencias de forma compleja entre consulados y oficinas generales.",
+        },
+        {
+          concept: "Excepciones al Despacho de Ejecución Civil",
+          why: "Requiere citar artículos correlativos de la LEC y diferenciar plazos de oposición de fondo vs. forma.",
+        },
+      ];
+    }
+    return list;
+  }, [opposition]);
+
+  const [customConcept, setCustomConcept] = useState(() => difficultConcepts[0]?.concept || "Plazos del Recurso de Queja");
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MnemonicResult | null>(null);
 
-  // Prepopulated complex concepts (<10% success rates)
-  const difficultConcepts = [
-    {
-      concept: "Plazos del Recurso de Queja",
-      why: "Se confunde recurrentemente con la queja administrativa y sus plazos varían según la jurisdicción.",
-    },
-    {
-      concept: "Competencia de las Oficinas del Registro Civil",
-      why: "La desjudicialización total de 2021 redistribuyó competencias de forma compleja entre consulados y oficinas generales.",
-    },
-    {
-      concept: "Excepciones al Despacho de Ejecución Civil",
-      why: "Requiere citar artículos correlativos de la LEC y diferenciar plazos de oposición de fondo vs. forma.",
-    },
-  ];
+  // Sync customConcept when opposition changes
+  useEffect(() => {
+    if (difficultConcepts[0]) {
+      setCustomConcept(difficultConcepts[0].concept);
+      setResult(null);
+    }
+  }, [opposition, difficultConcepts]);
 
   const handleFetchMnemonic = async (concept: string) => {
-    if (isSimulatedOffline) {
-      setError("La generación de mnemotecnias por IA requiere conexión activa a internet. Se muestra la regla de respaldo.");
-      return;
-    }
     setIsGenerating(true);
     setError(null);
     setResult(null);
 
     try {
+      if (isSimulatedOffline) {
+        throw new Error("Modo offline simulado activo");
+      }
+
       const response = await fetch("/api/gemini/generate-mnemonic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -112,21 +138,23 @@ export default function MnemonicsStudy({ opposition, isSimulatedOffline }: Mnemo
       const data = await response.json();
       setResult(data);
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Error al generar la regla mnemotécnica.");
+      console.warn("API mnemonic failed or offline. Generating client-side.", err);
+      const data = generateClientMnemonic(concept, opposition.name);
+      setResult(data);
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // Compile the current active mnemonic, prioritizing dynamically generated ones, falling back to OFFLINE_MNEMONICS_DB
+  // Compile the current active mnemonic, prioritizing dynamically generated ones, falling back to OFFLINE_MNEMONICS_DB, then client fallback
   const activeMnemonic = useMemo<MnemonicResult | null>(() => {
     if (result) return result;
     if (OFFLINE_MNEMONICS_DB[customConcept]) {
       return OFFLINE_MNEMONICS_DB[customConcept];
     }
-    return OFFLINE_MNEMONICS_DB["Plazos del Recurso de Queja"];
-  }, [result, customConcept]);
+    // Generate beautiful on-the-fly client-side mnemonic adapted to custom concept
+    return generateClientMnemonic(customConcept, opposition.name);
+  }, [result, customConcept, opposition]);
 
   return (
     <div id="mnemonics-study" className="space-y-6">

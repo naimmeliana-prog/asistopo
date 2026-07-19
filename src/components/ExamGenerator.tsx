@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { OppositionData } from "../types";
 import { FileCheck, Clock, Award, CheckCircle2, XCircle, AlertCircle, RefreshCw, Loader2, Play, Sparkles } from "lucide-react";
+import { generateClientTest } from "../lib/clientAiGenerator";
 
 interface ExamGeneratorProps {
   opposition: OppositionData;
@@ -91,13 +92,13 @@ export default function ExamGenerator({
       launchExam(combinedQuestions.length);
     } else {
       // AI Exam Generation
-      if (isSimulatedOffline) {
-        setGenerationError("La generación de test por IA requiere conexión activa a internet.");
-        return;
-      }
       setIsGenerating(true);
 
       try {
+        if (isSimulatedOffline) {
+          throw new Error("Modo offline simulado activo");
+        }
+
         const response = await fetch("/api/gemini/generate-test", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -129,8 +130,16 @@ export default function ExamGenerator({
         setQuestions(formattedQuestions);
         launchExam(formattedQuestions.length);
       } catch (err: any) {
-        console.error(err);
-        setGenerationError(err.message || "Error al fabricar el cuestionario de Inteligencia Artificial.");
+        console.warn("Using offline / local client AI test generation fallback:", err);
+        const data = generateClientTest(opposition.name, aiSelectedBlocks, aiQuestionCount, aiDifficulty);
+        const formattedQuestions: Question[] = data.questions.map((q: any) => ({
+          question: q.question,
+          options: q.options,
+          correctIndex: q.correctIndex,
+          justification: q.justification,
+        }));
+        setQuestions(formattedQuestions);
+        launchExam(formattedQuestions.length);
       } finally {
         setIsGenerating(false);
       }

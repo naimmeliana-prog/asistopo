@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
-import { Brain, Bookmark, Check, RefreshCw, Layers, Award, Info, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Brain, Bookmark, Check, RefreshCw, Layers, Award, Info, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { motion } from "motion/react";
+import { OppositionData } from "../types";
 
 interface Card {
   id: string;
@@ -9,48 +10,118 @@ interface Card {
   box: number; // Leitner Box
 }
 
-export default function FlashcardsApp() {
-  const [cards, setCards] = useState<Card[]>([
-    {
-      id: "fc-1",
-      question: "¿Cuál es el plazo máximo general de que dispone la Administración para dictar y notificar resolución expresa en un procedimiento administrativo común?",
-      answer: "3 meses, salvo que una norma con rango de ley o del Derecho de la Unión Europea establezca otro mayor (Art. 21.3 Ley 39/2015).",
-      box: 1,
-    },
-    {
-      id: "fc-2",
-      question: "¿A partir de qué edad puede un ciudadano español presentarse válidamente como opositor a los Cuerpos Generales de Justicia?",
-      answer: "16 años cumplidos, y no exceder de la edad máxima de jubilación forzosa (Art. 475 LOPJ).",
-      box: 1,
-    },
-    {
-      id: "fc-3",
-      question: "¿Qué mayoría se requiere en el Congreso de los Diputados para la aprobación, modificación o derogación de una Ley Orgánica?",
-      answer: "Mayoría absoluta de los miembros del Congreso, en una votación final sobre el conjunto del proyecto (Art. 81.2 Constitución Española).",
-      box: 2,
-    },
-    {
-      id: "fc-4",
-      question: "¿Qué efecto tiene el silencio administrativo en los procedimientos iniciados a solicitud del interesado por regla general?",
-      answer: "Regla general: Silencio positivo (estimatorio), salvo excepciones expresas en leyes estatales, Derecho de la UE o procedimientos de ejercicio de actividades de interés público (Art. 24 Ley 39/2015).",
-      box: 1,
-    },
-  ]);
+interface FlashcardsAppProps {
+  opposition: OppositionData | null;
+}
+
+export default function FlashcardsApp({ opposition }: FlashcardsAppProps) {
+  const [cards, setCards] = useState<Card[]>([]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
 
+  useEffect(() => {
+    const list: Card[] = [];
+    if (opposition) {
+      let fcIndex = 1;
+      
+      // 1. From official exams
+      if (opposition.officialExams) {
+        opposition.officialExams.forEach((exam) => {
+          if (exam.questions) {
+            exam.questions.forEach((q) => {
+              list.push({
+                id: `fc-exam-${fcIndex++}`,
+                question: q.question,
+                answer: `Opción Correcta: "${q.options[q.correctIndex]}". Fundamento Legal: ${q.justification}`,
+                box: 1,
+              });
+            });
+          }
+        });
+      }
+
+      // 2. From practical cases
+      if (opposition.practicalCases) {
+        opposition.practicalCases.forEach((pc) => {
+          if (pc.questions) {
+            pc.questions.forEach((q) => {
+              list.push({
+                id: `fc-case-${fcIndex++}`,
+                question: `[Supuesto Práctico] ${q.question}`,
+                answer: `Fundamento legal: ${q.legalBase}. Solución: ${q.solution}`,
+                box: 1,
+              });
+            });
+          }
+        });
+      }
+
+      // 3. From syllabus topics
+      if (opposition.syllabus) {
+        opposition.syllabus.forEach((block) => {
+          if (block.topics) {
+            block.topics.forEach((topic) => {
+              list.push({
+                id: `fc-topic-${fcIndex++}`,
+                question: `¿Qué disposiciones o materias regula el tema de estudio "${topic.title}"?`,
+                answer: `Regulado principalmente en: ${topic.articles ? topic.articles.join(", ") : "normas generales"}. Síntesis: ${topic.content || ""}`,
+                box: 1,
+              });
+            });
+          }
+        });
+      }
+    }
+
+    if (list.length === 0) {
+      setCards([
+        {
+          id: "fc-1",
+          question: "¿Cuál es el plazo máximo general de que dispone la Administración para dictar y notificar resolución expresa en un procedimiento administrativo común?",
+          answer: "3 meses, salvo que una norma con rango de ley o del Derecho de la Unión Europea establezca otro mayor (Art. 21.3 Ley 39/2015).",
+          box: 1,
+        },
+        {
+          id: "fc-2",
+          question: "¿A partir de qué edad puede un ciudadano español presentarse válidamente como opositor a los Cuerpos Generales de Justicia?",
+          answer: "16 años cumplidos, y no exceder de la edad máxima de jubilación forzosa (Art. 475 LOPJ).",
+          box: 1,
+        },
+        {
+          id: "fc-3",
+          question: "¿Qué mayoría se requiere en el Congreso de los Diputados para la aprobación, modificación o derogación de una Ley Orgánica?",
+          answer: "Mayoría absoluta de los miembros del Congreso, en una votación final sobre el conjunto del proyecto (Art. 81.2 Constitución Española).",
+          box: 2,
+        },
+        {
+          id: "fc-4",
+          question: "¿Qué efecto tiene el silencio administrativo en los procedimientos iniciados a solicitud del interesado por regla general?",
+          answer: "Regla general: Silencio positivo (estimatorio), salvo excepciones expresas en leyes estatales, Derecho de la UE o procedimientos de ejercicio de actividades de interés público (Art. 24 Ley 39/2015).",
+          box: 1,
+        },
+      ]);
+    } else {
+      setCards(list);
+    }
+    setCurrentIndex(0);
+    setIsFlipped(false);
+  }, [opposition]);
+
   const handleNext = () => {
+    if (cards.length === 0) return;
     setIsFlipped(false);
     setCurrentIndex((prev) => (prev + 1) % cards.length);
   };
 
   const handlePrev = () => {
+    if (cards.length === 0) return;
     setIsFlipped(false);
     setCurrentIndex((prev) => (prev - 1 + cards.length) % cards.length);
   };
 
   const handleSelfEvaluate = (cardId: string, level: "easy" | "hard") => {
+    if (cards.length === 0) return;
     setCards((prev) =>
       prev.map((c) => {
         if (c.id === cardId) {
@@ -76,6 +147,15 @@ export default function FlashcardsApp() {
     });
     return counts;
   }, [cards]);
+
+  if (cards.length === 0 || !activeCard) {
+    return (
+      <div id="flashcards-app" className="space-y-6 flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-gray-100">
+        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+        <p className="text-sm text-slate-500 font-medium">Iniciando tarjetas de estudio personalizadas...</p>
+      </div>
+    );
+  }
 
   return (
     <div id="flashcards-app" className="space-y-6">

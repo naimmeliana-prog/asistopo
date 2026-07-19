@@ -511,7 +511,7 @@ export default function App() {
               )}
 
               {activeModule === "flashcards" && (
-                <FlashcardsApp />
+                <FlashcardsApp opposition={activeOpposition} />
               )}
 
               {activeModule === "forum" && (

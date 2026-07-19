@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  --color-indigo-50: #f0f4f9;
+  --color-indigo-100: #dce6f2;
+  --color-indigo-200: #b9cee6;
+  --color-indigo-300: #88accf;
+  --color-indigo-400: #5185b3;
+  --color-indigo-500: #1d4d7f; /* Official Ministry Deep Navy */
+  --color-indigo-600: #0d2c54; /* Primary Institutional Royal Navy */
+  --color-indigo-700: #0a2140;
+  --color-indigo-800: #07172b;
+  --color-indigo-900: #040c17;
+  --color-indigo-950: #02060a;
+}

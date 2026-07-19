@@ -118,6 +118,7 @@ async function generateAISchema(params: {
           { role: "system", content: systemInstruction },
           { role: "user", content: prompt }
         ],
+        max_tokens: 4096,
       };
 
       if (responseMimeType === "application/json") {
@@ -203,7 +204,7 @@ async function fetchBoeRealSearch(query: string): Promise<any[]> {
       url = `https://www.boe.es/buscar/xml.php?campo[0]=TIT&dato[0]=${encodeURIComponent(query.trim())}&operador[0]=and&campo[1]=SEC&dato[1]=2b`;
     } else {
       // If no query, just pull general recent items from Section II.B
-      url = `https://www.boe.es/buscar/xml.php?campo[1]=SEC&dato[1]=2b`;
+      url = `https://www.boe.es/buscar/xml.php?campo[0]=SEC&dato[0]=2b`;
     }
 
     console.log("Fetching real BOE search from URL:", url);

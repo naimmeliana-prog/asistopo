@@ -299,12 +299,17 @@ export default function App() {
               value={selectedOppositionId}
               onChange={(e) => setSelectedOppositionId(e.target.value)}
               className="px-3 py-1.5 text-xs bg-slate-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold text-slate-700 animate-fade-in"
+              disabled={allOppositions.length === 0}
             >
-              {allOppositions.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name} ({o.shortName})
-                </option>
-              ))}
+              {allOppositions.length === 0 ? (
+                <option value="">(Sin oposiciones activas)</option>
+              ) : (
+                allOppositions.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name} ({o.shortName})
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
@@ -344,12 +349,17 @@ export default function App() {
                 value={selectedOppositionId}
                 onChange={(e) => setSelectedOppositionId(e.target.value)}
                 className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-gray-200 rounded-lg text-slate-700"
+                disabled={allOppositions.length === 0}
               >
-                {allOppositions.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.shortName} - {o.group}
-                  </option>
-                ))}
+                {allOppositions.length === 0 ? (
+                  <option value="">(Sin oposiciones activas)</option>
+                ) : (
+                  allOppositions.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.shortName} - {o.group}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 
@@ -403,98 +413,122 @@ export default function App() {
 
         {/* Primary Content Container */}
         <main className="flex-1 p-4 md:p-8 overflow-y-auto max-w-full">
-          {activeModule === "dashboard" && (
-            <DashboardIntro
-              selectedOppositionName={activeOpposition.name}
-              onNavigate={setActiveModule}
-            />
-          )}
+          {!activeOpposition && activeModule !== "searcher" && activeModule !== "techniques" && activeModule !== "flashcards" && activeModule !== "forum" && activeModule !== "progress" ? (
+            <div className="flex flex-col items-center justify-center py-16 px-4 text-center max-w-lg mx-auto space-y-6">
+              <div className="w-16 h-16 rounded-3xl bg-indigo-50 flex items-center justify-center border border-indigo-100 text-indigo-600 animate-pulse">
+                <Sparkles className="w-8 h-8" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-lg font-extrabold text-slate-900">Comienza tu Preparación Real</h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Actualmente no tienes ningún temario en tu catálogo de estudio.
+                  Utiliza nuestro buscador para encontrar convocatorias reales en el BOE o diarios autonómicos oficiales y pulsa "Estudiar con IA" para estructurar tu preparación de inmediato.
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveModule("searcher")}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md shadow-indigo-600/10 cursor-pointer transition-all flex items-center gap-2 mx-auto"
+              >
+                <Search className="w-4 h-4" />
+                Buscar Oposiciones Reales en el BOE
+              </button>
+            </div>
+          ) : (
+            <>
+              {activeModule === "dashboard" && activeOpposition && (
+                <DashboardIntro
+                  selectedOppositionName={activeOpposition.name}
+                  onNavigate={setActiveModule}
+                />
+              )}
 
-          {activeModule === "searcher" && (
-            <OppositionSearcher
-              onSelectOpposition={(id) => {
-                setSelectedOppositionId(id);
-                setActiveModule("dashboard");
-              }}
-              selectedOppositionId={selectedOppositionId}
-              allOppositions={allOppositions}
-              onAddCustomOpposition={handleAddCustomOpposition}
-            />
-          )}
+              {activeModule === "searcher" && (
+                <OppositionSearcher
+                  onSelectOpposition={(id) => {
+                    setSelectedOppositionId(id);
+                    setActiveModule("dashboard");
+                  }}
+                  selectedOppositionId={selectedOppositionId}
+                  allOppositions={allOppositions}
+                  onAddCustomOpposition={handleAddCustomOpposition}
+                />
+              )}
 
-          {activeModule === "syllabus" && (
-            <SyllabusViewer
-              opposition={activeOpposition}
-              completedTopics={completedTopics}
-              onToggleTopicCompleted={handleToggleTopicCompleted}
-              reviewTopics={reviewTopics}
-              onToggleTopicReview={handleToggleTopicReview}
-            />
-          )}
+              {activeModule === "syllabus" && activeOpposition && (
+                <SyllabusViewer
+                  opposition={activeOpposition}
+                  completedTopics={completedTopics}
+                  onToggleTopicCompleted={handleToggleTopicCompleted}
+                  reviewTopics={reviewTopics}
+                  onToggleTopicReview={handleToggleTopicReview}
+                />
+              )}
 
-          {activeModule === "cases" && (
-            <CaseStudies
-              opposition={activeOpposition}
-              isSimulatedOffline={isSimulatedOffline}
-            />
-          )}
+              {activeModule === "cases" && activeOpposition && (
+                <CaseStudies
+                  opposition={activeOpposition}
+                  isSimulatedOffline={isSimulatedOffline}
+                />
+              )}
 
-          {activeModule === "material" && (
-            <MaterialGenerator
-              opposition={activeOpposition}
-            />
-          )}
+              {activeModule === "material" && activeOpposition && (
+                <MaterialGenerator
+                  opposition={activeOpposition}
+                />
+              )}
 
-          {activeModule === "stats" && (
-            <StatisticalAnalysis
-              opposition={activeOpposition}
-              progress={userProgress}
-            />
-          )}
+              {activeModule === "stats" && activeOpposition && (
+                <StatisticalAnalysis
+                  opposition={activeOpposition}
+                  progress={userProgress}
+                />
+              )}
 
-          {activeModule === "traps" && (
-            <TrapsAndPatterns
-              opposition={activeOpposition}
-              isSimulatedOffline={isSimulatedOffline}
-            />
-          )}
+              {activeModule === "traps" && activeOpposition && (
+                <TrapsAndPatterns
+                  opposition={activeOpposition}
+                  isSimulatedOffline={isSimulatedOffline}
+                />
+              )}
 
-          {activeModule === "mnemonics" && (
-            <MnemonicsStudy
-              opposition={activeOpposition}
-              isSimulatedOffline={isSimulatedOffline}
-            />
-          )}
+              {activeModule === "mnemonics" && activeOpposition && (
+                <MnemonicsStudy
+                  opposition={activeOpposition}
+                  isSimulatedOffline={isSimulatedOffline}
+                />
+              )}
 
-          {activeModule === "exams" && (
-            <ExamGenerator
-              opposition={activeOpposition}
-              isSimulatedOffline={isSimulatedOffline}
-              onLogTestResult={handleLogTestResult}
-            />
-          )}
+              {activeModule === "exams" && activeOpposition && (
+                <ExamGenerator
+                  opposition={activeOpposition}
+                  isSimulatedOffline={isSimulatedOffline}
+                  onLogTestResult={handleLogTestResult}
+                />
+              )}
 
-          {activeModule === "techniques" && (
-            <StudyTechniques />
-          )}
+              {activeModule === "techniques" && (
+                <StudyTechniques />
+              )}
 
-          {activeModule === "flashcards" && (
-            <FlashcardsApp />
-          )}
+              {activeModule === "flashcards" && (
+                <FlashcardsApp />
+              )}
 
-          {activeModule === "forum" && (
-            <ForumComponent />
-          )}
+              {activeModule === "forum" && (
+                <ForumComponent />
+              )}
 
-          {activeModule === "progress" && (
-            <LogrosProgreso
-              progress={userProgress}
-              onImportProgress={(imported) => {
-                saveProgress(imported);
-                if (imported.completedTopics) setCompletedTopics(imported.completedTopics);
-                if (imported.reviewTopics) setReviewTopics(imported.reviewTopics);
-              }}
-            />
+              {activeModule === "progress" && (
+                <LogrosProgreso
+                  progress={userProgress}
+                  onImportProgress={(imported) => {
+                    saveProgress(imported);
+                    if (imported.completedTopics) setCompletedTopics(imported.completedTopics);
+                    if (imported.reviewTopics) setReviewTopics(imported.reviewTopics);
+                  }}
+                />
+              )}
+            </>
           )}
         </main>
       </div>

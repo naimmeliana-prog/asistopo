@@ -198,17 +198,6 @@ function cleanXmlText(str: string): string {
 // Helper function to fetch real search results from the BOE XML search engine
 async function fetchBoeRealSearch(query: string): Promise<any[]> {
   try {
-<<<<<<< HEAD
-    let url = "";
-    if (query.trim()) {
-      // Use BOE's XML search engine to query Section II.B (Oposiciones y concursos) by Title matching the keyword.
-      // We keep the keys unencoded (with literal brackets) as the legacy BOE server rejects percent-encoded brackets with a 400 Bad Request error.
-      const encodedQuery = encodeURIComponent(query.trim());
-      url = `https://www.boe.es/buscar/xml.php?campo[0]=TIT&dato[0]=${encodedQuery}&operador[0]=and&campo[1]=SEC&dato[1]=2b`;
-    } else {
-      url = `https://www.boe.es/buscar/xml.php?campo[0]=SEC&dato[0]=2b`;
-    }
-=======
     const params = new URLSearchParams();
     if (query.trim()) {
       // Use BOE's XML search engine to query Section II.B (Oposiciones y concursos) by Title matching the keyword
@@ -224,7 +213,7 @@ async function fetchBoeRealSearch(query: string): Promise<any[]> {
     }
 
     const url = `https://www.boe.es/buscar/xml.php?${params.toString()}`;
->>>>>>> 9f69e27eed8b575146b2dae653e414a35cd173af
+9f69e27eed8b575146b2dae653e414a35cd173af
     console.log("Fetching real BOE search from URL:", url);
     const response = await fetch(url, {
       headers: {

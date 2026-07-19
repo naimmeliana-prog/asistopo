@@ -428,6 +428,108 @@ Genera la respuesta como un objeto JSON con la estructura exacta descrita a cont
   }
 });
 
+// API endpoint to search and generate an external opposition in Spain using Gemini & Google Search Grounding
+app.post("/api/gemini/search-external", async (req: Request, res: Response) => {
+  try {
+    const { query } = req.body;
+    if (!query) {
+      res.status(400).json({ error: "No se ha especificado ninguna búsqueda." });
+      return;
+    }
+
+    const ai = getAI();
+    const prompt = `Localiza o genera información real y actualizada sobre la oposición en España correspondiente a la consulta: "${query}".
+Utiliza Google Search para fundamentar las plazas, el boletín (BOE/DOGV/BOCM/etc.), los requisitos oficiales, plazos y el temario oficial del cuerpo.
+
+Devuelve la información estrictamente en formato JSON que represente una oposición completa según la interfaz descrita abajo. No incluyas ningún texto de explicación fuera de este objeto JSON. El JSON debe cumplir con la siguiente estructura:
+
+{
+  "id": "Un identificador único en minúsculas y con guiones basado en el nombre, por ejemplo: 'bombero-madrid' o 'auxiliar-junta-andalucia'",
+  "name": "Nombre oficial completo de la oposición, ej. 'Bombero del Ayuntamiento de Madrid'",
+  "shortName": "Nombre corto común o siglas, ej. 'Bombero Madrid' o 'Auxiliar JJA'",
+  "group": "Grupo funcionarial correspondiente: 'A1', 'A2', 'C1' o 'C2'",
+  "adminType": "Una de las siguientes: 'Estatal', 'Autonómica', 'Local' o 'Universitaria'",
+  "region": "Comunidad Autónoma o provincia/localidad de España (ej. 'Madrid', 'Andalucía', 'Comunidad Valenciana', 'Nacional' si es estatal)",
+  "status": "Estado de la convocatoria: 'Abierto', 'Cerrado' o 'Próxima Convocatoria'",
+  "generalRequirements": [
+    "Requisito de nacionalidad...",
+    "Requisito de edad...",
+    "Requisito de titulación académica..."
+  ],
+  "tribunalQualities": [
+    "Valoración de la literalidad de la ley",
+    "Exigencia de precisión en los plazos"
+  ],
+  "card": {
+    "vacancies": 45,
+    "scale": "Cuerpo o Escala de la oposición",
+    "deadline": "Plazo de presentación o 'Próximamente' o 'Cerrado'",
+    "referenceBOE": "Referencia del boletín oficial (BOE/DOGV/BOCM/etc.) real",
+    "officialLink": "Un enlace oficial real o el del portal de empleo correspondiente",
+    "place": "Provincia o localidad de celebración",
+    "examType": "Breve descripción del examen (ej. 'Oposición: Test + Supuesto práctico')",
+    "minDegree": "Titulación mínima requerida",
+    "legislativeWarning": "Aviso legislativo breve para el opositor sobre la normativa aplicable"
+  },
+  "syllabus": [
+    {
+      "id": "bloque-1",
+      "title": "Bloque I: Derecho Constitucional y Administrativo",
+      "weight": 40,
+      "topics": [
+        {
+          "id": "tema-1",
+          "title": "La Constitución Española de 1978: Estructura y principios generales",
+          "articles": ["Constitución Española (CE) Art. 1 a 9"],
+          "content": "Resumen conceptual amplio del tema, incluyendo principios de soberanía, estado social y democrático de derecho, jerarquía normativa, etc."
+        },
+        {
+          "id": "tema-2",
+          "title": "El Procedimiento Administrativo Común de las Administraciones Públicas",
+          "articles": ["Ley 39/2015 Art. 30, 31, 32"],
+          "content": "Resumen amplio del procedimiento común, plazos administrativos, días hábiles e inhábiles, de conformidad con la normativa de régimen jurídico común."
+        }
+      ]
+    },
+    {
+      "id": "bloque-2",
+      "title": "Bloque II: Temario Específico del Cuerpo",
+      "weight": 60,
+      "topics": [
+        {
+          "id": "tema-3",
+          "title": "Tema específico y técnico de la oposición (desarrollar de forma muy profesional)",
+          "articles": ["Normativa específica aplicable"],
+          "content": "Resumen técnico detallado y adaptado a lo que se pregunta en esta oposición en particular."
+        }
+      ]
+    }
+  ],
+  "officialExams": [],
+  "practicalCases": []
+}
+
+Asegúrate de que la respuesta sea un JSON perfectamente válido y que el syllabus tenga al menos 2 bloques con temas estructurados que el usuario pueda navegar y estudiar directamente en la app.";
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+        systemInstruction: "Eres un buscador y preparador de oposiciones oficiales en España de última generación. Empleas herramientas de búsqueda web para recopilar datos auténticos sobre plazas, requisitos, BOEs y temarios, y los formateas exactamente como un objeto JSON según el esquema de OppositionData.",
+      },
+    });
+
+    const text = response.text || "{}";
+    const data = JSON.parse(text);
+    res.json(data);
+  } catch (error: any) {
+    console.error("Error searching external opposition:", error);
+    res.status(500).json({ error: error.message || "No se pudo buscar la oposición externa." });
+  }
+});
+
 // Start backend and handle frontend mounting
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {

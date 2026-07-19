@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { OPPOSITIONS_DATABASE } from "../data/oppositions";
 import { OppositionData } from "../types";
-import { Search, Filter, RefreshCw, CheckCircle, ExternalLink, Calendar, MapPin, Layers, Wifi, AlertTriangle } from "lucide-react";
+import { Search, Filter, RefreshCw, CheckCircle, ExternalLink, Calendar, MapPin, Layers, Wifi, AlertTriangle, Sparkles, Loader2 } from "lucide-react";
 
 interface RSSItem {
   title: string;
@@ -13,11 +12,15 @@ interface RSSItem {
 interface OppositionSearcherProps {
   onSelectOpposition: (id: string) => void;
   selectedOppositionId: string;
+  allOppositions: OppositionData[];
+  onAddCustomOpposition: (newOpp: OppositionData) => void;
 }
 
 export default function OppositionSearcher({
   onSelectOpposition,
   selectedOppositionId,
+  allOppositions,
+  onAddCustomOpposition,
 }: OppositionSearcherProps) {
   // Filters state
   const [searchTerm, setSearchTerm] = useState("");
@@ -151,19 +154,45 @@ export default function OppositionSearcher({
 
   // Unique list of regions for the filter dropdown
   const regionsList = useMemo(() => {
-    const list = new Set(OPPOSITIONS_DATABASE.map((o) => o.region));
+    const list = new Set(allOppositions.map((o) => o.region));
     return ["Todos", ...Array.from(list)];
-  }, []);
+  }, [allOppositions]);
 
   // Filtered oppositions logic
   const filteredOppositions = useMemo(() => {
-    return OPPOSITIONS_DATABASE.filter((opp) => {
+    return allOppositions.filter((opp) => {
       try {
-        // Search term (name or short name)
-        const nameClean = normalizeString(opp.name || "");
-        const shortNameClean = normalizeString(opp.shortName || "");
+        // Search term (searches across name, shortName, region, group, adminType, scale, requirements, syllabus blocks & topics)
         const termClean = normalizeString(searchTerm || "").trim();
-        const matchesSearch = !termClean || nameClean.includes(termClean) || shortNameClean.includes(termClean);
+        let matchesSearch = true;
+        if (termClean) {
+          const nameClean = normalizeString(opp.name || "");
+          const shortNameClean = normalizeString(opp.shortName || "");
+          const regionClean = normalizeString(opp.region || "");
+          const groupClean = normalizeString(opp.group || "");
+          const adminTypeClean = normalizeString(opp.adminType || "");
+          const boeClean = normalizeString(opp.card?.referenceBOE || "");
+          const scaleClean = normalizeString(opp.card?.scale || "");
+          const requirementsClean = normalizeString((opp.generalRequirements || []).join(" "));
+          
+          // Check syllabus
+          const syllabusClean = normalizeString(
+            (opp.syllabus || [])
+              .map((b) => b.title + " " + (b.topics || []).map((t) => t.title + " " + t.content).join(" "))
+              .join(" ")
+          );
+
+          matchesSearch =
+            nameClean.includes(termClean) ||
+            shortNameClean.includes(termClean) ||
+            regionClean.includes(termClean) ||
+            groupClean.includes(termClean) ||
+            adminTypeClean.includes(termClean) ||
+            boeClean.includes(termClean) ||
+            scaleClean.includes(termClean) ||
+            requirementsClean.includes(termClean) ||
+            syllabusClean.includes(termClean);
+        }
 
         // BOE reference
         const boeClean = normalizeString(opp.card?.referenceBOE || "");

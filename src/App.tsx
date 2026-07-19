@@ -32,6 +32,26 @@ export default function App() {
   const [isSimulatedOffline, setIsSimulatedOffline] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Custom dynamically-discovered external oppositions
+  const [customOppositions, setCustomOppositions] = useState<OppositionData[]>(() => {
+    const saved = localStorage.getItem("opo_custom_oppositions");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const allOppositions = useMemo(() => {
+    return [...OPPOSITIONS_DATABASE, ...customOppositions];
+  }, [customOppositions]);
+
+  const handleAddCustomOpposition = (newOpp: OppositionData) => {
+    setCustomOppositions((prev) => {
+      const alreadyExists = prev.some((o) => o.id === newOpp.id);
+      if (alreadyExists) return prev;
+      const updated = [...prev, newOpp];
+      localStorage.setItem("opo_custom_oppositions", JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   // Syllabus completed and review topics tracking states
   const [completedTopics, setCompletedTopics] = useState<string[]>([]);
   const [reviewTopics, setReviewTopics] = useState<string[]>([]);
@@ -167,7 +187,7 @@ export default function App() {
   };
 
   // Get active opposition database
-  const activeOpposition = OPPOSITIONS_DATABASE.find((o) => o.id === selectedOppositionId) || OPPOSITIONS_DATABASE[0];
+  const activeOpposition = allOppositions.find((o) => o.id === selectedOppositionId) || allOppositions[0];
 
   // Font size scaling controls (A+, A-)
   const [textSize, setTextSize] = useState<"normal" | "large" | "xlarge">("normal");
@@ -280,7 +300,7 @@ export default function App() {
               onChange={(e) => setSelectedOppositionId(e.target.value)}
               className="px-3 py-1.5 text-xs bg-slate-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold text-slate-700 animate-fade-in"
             >
-              {OPPOSITIONS_DATABASE.map((o) => (
+              {allOppositions.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.name} ({o.shortName})
                 </option>
@@ -325,7 +345,7 @@ export default function App() {
                 onChange={(e) => setSelectedOppositionId(e.target.value)}
                 className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-gray-200 rounded-lg text-slate-700"
               >
-                {OPPOSITIONS_DATABASE.map((o) => (
+                {allOppositions.map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.shortName} - {o.group}
                   </option>
@@ -397,6 +417,8 @@ export default function App() {
                 setActiveModule("dashboard");
               }}
               selectedOppositionId={selectedOppositionId}
+              allOppositions={allOppositions}
+              onAddCustomOpposition={handleAddCustomOpposition}
             />
           )}
 

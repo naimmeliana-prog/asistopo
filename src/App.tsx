@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { OPPOSITIONS_DATABASE } from "./data/oppositions";
 import { UserProgress, OppositionData } from "./types";
 

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { OppositionData } from "../types";
-import { Search, Filter, RefreshCw, CheckCircle, ExternalLink, Calendar, MapPin, Layers, Wifi, AlertTriangle, Sparkles, Loader2 } from "lucide-react";
+import { Search, Filter, RefreshCw, ExternalLink, Calendar, MapPin, Layers, Wifi, AlertTriangle } from "lucide-react";
 
 interface RSSItem {
   title: string;
@@ -38,6 +38,8 @@ export default function OppositionSearcher({
   const [rssItems, setRssItems] = useState<RSSItem[]>([]);
   const [loadingRss, setLoadingRss] = useState(false);
   const [rssError, setRssError] = useState("");
+
+  // Custom opposition import removed per user request (no offline DB enrichment via IA)
 
   const fetchRssFeed = async () => {
     setLoadingRss(true);
@@ -643,6 +645,8 @@ export default function OppositionSearcher({
             )}
           </div>
 
+          {/* Custom opposition import notification removed per user request */}
+
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-xs text-gray-500 font-semibold">
@@ -657,43 +661,45 @@ export default function OppositionSearcher({
               </div>
             ) : filteredRssItems.length > 0 ? (
               <div className="grid grid-cols-1 gap-4">
-                {filteredRssItems.map((item, index) => (
-                  <div
-                    key={index}
-                    id={`rss-card-${index}`}
-                    className="p-5 bg-white border border-gray-100 hover:border-gray-300 rounded-2xl shadow-xs hover:shadow-md transition-all space-y-2"
-                  >
-                    <div className="flex justify-between items-start gap-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wider">
-                            BOE Oficial
-                          </span>
-                          <span className="text-[10px] text-gray-400 font-semibold">
-                            {item.pubDate ? new Date(item.pubDate).toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" }) : "Fecha no disponible"}
-                          </span>
+                {filteredRssItems.map((item, index) => {
+                  return (
+                    <div
+                      key={index}
+                      id={`rss-card-${index}`}
+                      className="p-5 bg-white border border-gray-100 hover:border-gray-300 rounded-2xl shadow-xs hover:shadow-md transition-all space-y-3"
+                    >
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wider">
+                              BOE Oficial
+                            </span>
+                            <span className="text-[10px] text-gray-400 font-semibold">
+                              {item.pubDate ? new Date(item.pubDate).toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" }) : "Fecha no disponible"}
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-extrabold text-slate-900 leading-snug">
+                            {item.title}
+                          </h4>
                         </div>
-                        <h4 className="text-sm font-extrabold text-slate-900 leading-snug">
-                          {item.title}
-                        </h4>
+                        <a
+                          href={item.link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 rounded-lg border border-slate-200 hover:border-indigo-200 transition-all cursor-pointer shrink-0"
+                          title="Ver BOE original"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
                       </div>
-                      <a
-                        href={item.link}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 rounded-lg border border-slate-200 hover:border-indigo-200 transition-all cursor-pointer shrink-0"
-                        title="Ver BOE original"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
+                      {item.description && (
+                        <p className="text-xs text-slate-600 leading-relaxed bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                          {item.description}
+                        </p>
+                      )}
                     </div>
-                    {item.description && (
-                      <p className="text-xs text-slate-600 leading-relaxed bg-slate-50/50 p-3 rounded-xl border border-slate-100">
-                        {item.description}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="p-10 text-center bg-slate-50 border border-dashed border-slate-200 rounded-3xl space-y-3.5 max-w-md mx-auto">

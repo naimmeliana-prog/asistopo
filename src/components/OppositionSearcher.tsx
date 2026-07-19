@@ -246,306 +246,447 @@ export default function OppositionSearcher({
         </div>
       </div>
 
-      {/* Main filter card */}
-      <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Nombre de la Oposición / Cuerpo
-            </label>
-            <div className="relative">
-              <Search className="absolute left-3 top-2.5 w-4.5 h-4.5 text-gray-400" />
-              <input
-                id="search-input-text"
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Ej: Tramitación, Auxilio..."
-                className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 hover:bg-gray-100/50 focus:bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Código / Referencia BOE / DOUE
-            </label>
-            <input
-              id="search-input-boe"
-              type="text"
-              value={boeReference}
-              onChange={(e) => setBoeReference(e.target.value)}
-              placeholder="Ej: BOE-A-2026-8832"
-              className="w-full px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100/50 focus:bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Estado de Convocatoria (Plazo)
-            </label>
-            <select
-              id="search-select-status"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100/50 focus:bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-            >
-              <option value="Todos">Todos los plazos</option>
-              <option value="Abierto">Abierto (Plazo de inscripción)</option>
-              <option value="Cerrado">Cerrado / En curso</option>
-              <option value="Próxima Convocatoria">Próxima Convocatoria</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Extended Filters Collapsible Area */}
-        <div className="pt-4 border-t border-gray-100 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-500 mb-1">
-              Grupo de Titulación
-            </label>
-            <select
-              id="filter-group"
-              value={group}
-              onChange={(e) => setGroup(e.target.value)}
-              className="w-full px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            >
-              <option value="Todos">Todos (A1, A2, C1, C2)</option>
-              <option value="A1">Grupo A1 (Superior)</option>
-              <option value="A2">Grupo A2 (Técnico)</option>
-              <option value="C1">Grupo C1 (Bachiller)</option>
-              <option value="C2">Grupo C2 (ESO)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-500 mb-1">
-              Organismo Emisor
-            </label>
-            <select
-              id="filter-admin"
-              value={adminType}
-              onChange={(e) => setAdminType(e.target.value)}
-              className="w-full px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            >
-              <option value="Todos">Todos los organismos</option>
-              <option value="Estatal">Administración del Estado</option>
-              <option value="Autonómica">Autonómica / CC.AA.</option>
-              <option value="Local">Ayuntamiento / Local</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-500 mb-1">
-              Comunidad Autónoma
-            </label>
-            <select
-              id="filter-region"
-              value={region}
-              onChange={(e) => setRegion(e.target.value)}
-              className="w-full px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            >
-              {regionsList.map((reg) => (
-                <option key={reg} value={reg}>
-                  {reg === "Todos" ? "Cualquier región" : reg}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-500 mb-1">
-              Cupo Discapacidad
-            </label>
-            <select
-              id="filter-disability"
-              value={disabilityQuota}
-              onChange={(e) => setDisabilityQuota(e.target.value)}
-              className="w-full px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            >
-              <option value="Todos">Todos</option>
-              <option value="Sí">Reserva específica (Sí)</option>
-              <option value="No">Sin reserva especial</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-500 mb-1">
-              Tipo de Examen
-            </label>
-            <select
-              id="filter-exam-type"
-              value={examType}
-              onChange={(e) => setExamType(e.target.value)}
-              className="w-full px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            >
-              <option value="Todos">Todos</option>
-              <option value="Oposición">Oposición pura</option>
-              <option value="Concurso">Concurso-Oposición</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-500 mb-1">
-              Titulación Mínima
-            </label>
-            <select
-              id="filter-degree"
-              value={minDegree}
-              onChange={(e) => setMinDegree(e.target.value)}
-              className="w-full px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            >
-              <option value="Todos">Todas</option>
-              <option value="Bachillerato">Bachillerato / FP</option>
-              <option value="Educación Secundaria">ESO o equivalente</option>
-            </select>
-          </div>
-        </div>
+      {/* Selector de Pestañas: Catálogo de Estudio vs Boletines en Tiempo Real */}
+      <div className="flex border-b border-gray-200 gap-2">
+        <button
+          onClick={() => setActiveTab("local")}
+          className={`py-3 px-4 text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
+            activeTab === "local"
+              ? "border-indigo-600 text-indigo-600"
+              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          }`}
+        >
+          <span>Catálogo de Estudio Local ({filteredOppositions.length})</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("realtime")}
+          className={`py-3 px-4 text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
+            activeTab === "realtime"
+              ? "border-indigo-600 text-indigo-600"
+              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          }`}
+        >
+          <Wifi className="w-4 h-4 text-emerald-500 animate-pulse shrink-0" />
+          <span>Alertas BOE en Directo ({filteredRssItems.length})</span>
+        </button>
       </div>
 
-      {/* Main body: lists matched results in full-width as requested by the user */}
-      <div className="w-full space-y-4">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-gray-500 font-semibold">
-            Se han encontrado {filteredOppositions.length} oposiciones en el catálogo de estudio que coinciden con los filtros
-          </span>
-        </div>
+      {activeTab === "local" ? (
+        <>
+          {/* Main filter card */}
+          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Nombre de la Oposición / Cuerpo
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 w-4.5 h-4.5 text-gray-400" />
+                  <input
+                    id="search-input-text"
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Ej: Tramitación, Auxilio..."
+                    className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 hover:bg-gray-100/50 focus:bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  />
+                </div>
+              </div>
 
-        <div className="space-y-4">
-          {filteredOppositions.length > 0 ? (
-            filteredOppositions.map((opp) => {
-              const isSelected = selectedOppositionId === opp.id;
-              return (
-                <div
-                  key={opp.id}
-                  id={`opp-card-${opp.id}`}
-                        className={`p-5 rounded-2xl border transition-all ${
-                          isSelected
-                            ? "bg-indigo-50/50 border-indigo-400 shadow-sm"
-                            : "bg-white border-gray-100 hover:border-gray-300 hover:shadow-xs"
-                        }`}
-                      >
-                        <div className="flex flex-wrap justify-between items-start gap-2">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-indigo-100 text-indigo-800 uppercase">
-                                Grupo {opp.group}
-                              </span>
-                              <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-slate-100 text-slate-700">
-                                {opp.adminType}
-                              </span>
-                              <span
-                                className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
-                                  opp.status === "Abierto"
-                                    ? "bg-emerald-100 text-emerald-800"
-                                    : "bg-gray-100 text-gray-800"
-                                }`}
-                              >
-                                Plazo: {opp.status}
-                              </span>
-                            </div>
-                            <h3 className="text-base font-extrabold text-gray-900 pt-1">
-                              {opp.name} ({opp.shortName})
-                            </h3>
-                          </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Código / Referencia BOE / DOUE
+                </label>
+                <input
+                  id="search-input-boe"
+                  type="text"
+                  value={boeReference}
+                  onChange={(e) => setBoeReference(e.target.value)}
+                  placeholder="Ej: BOE-A-2026-8832"
+                  className="w-full px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100/50 focus:bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                />
+              </div>
 
-                          <button
-                            id={`btn-select-opp-${opp.id}`}
-                            onClick={() => onSelectOpposition(opp.id)}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
-                              isSelected
-                                ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                                : "bg-slate-100 text-slate-800 hover:bg-slate-200"
-                            }`}
-                          >
-                            {isSelected ? "Oposición Seleccionada" : "Seleccionar para Estudio"}
-                          </button>
-                        </div>
-
-                        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-50 text-xs text-slate-600">
-                          <div className="space-y-0.5">
-                            <span className="text-gray-400 block font-semibold text-[10px] uppercase">
-                              Referencia BOE
-                            </span>
-                            <span className="font-mono text-slate-800 font-semibold">{opp.card.referenceBOE}</span>
-                          </div>
-                          <div className="space-y-0.5">
-                            <span className="text-gray-400 block font-semibold text-[10px] uppercase">
-                              Ámbito Geográfico
-                            </span>
-                            <span className="flex items-center gap-1 text-slate-800 font-semibold">
-                              <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                              {opp.region}
-                            </span>
-                          </div>
-                          <div className="space-y-0.5">
-                            <span className="text-gray-400 block font-semibold text-[10px] uppercase">
-                              Plazas Ofrecidas
-                            </span>
-                            <strong className="text-indigo-600 font-bold text-sm">
-                              {opp.card.vacancies.toLocaleString()} plazas
-                            </strong>
-                          </div>
-                          <div className="space-y-0.5">
-                            <span className="text-gray-400 block font-semibold text-[10px] uppercase">
-                              Fecha Límite
-                            </span>
-                            <span className="flex items-center gap-1 text-slate-800 font-semibold">
-                              <Calendar className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                              {opp.card.deadline}
-                            </span>
-                          </div>
-                        </div>
-
-                        {opp.card.legislativeWarning && (
-                          <div className="mt-4 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs leading-relaxed">
-                            <strong>Recomendación Legislativa:</strong> {opp.card.legislativeWarning}
-                          </div>
-                        )}
-
-                        <div className="mt-3.5 flex justify-between items-center text-xs">
-                          <a
-                            href={opp.card.officialLink}
-                            target="_blank"
-                            referrerPolicy="no-referrer"
-                            className="text-indigo-600 hover:underline flex items-center gap-1 cursor-pointer"
-                          >
-                            Enlace Oficial a la Convocatoria <ExternalLink className="w-3 h-3" />
-                          </a>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="p-10 text-center bg-slate-50 border border-dashed border-slate-200 rounded-3xl space-y-3.5 max-w-md mx-auto">
-                    <AlertTriangle className="w-6 h-6 text-slate-400 mx-auto" />
-                    <div>
-                      <h4 className="text-sm font-extrabold text-slate-900">No se encontraron oposiciones</h4>
-                      <p className="text-[11px] text-slate-500 leading-normal mt-0.5">
-                        No hay ninguna convocatoria en nuestro catálogo local que coincida con los filtros activos.
-                      </p>
-                    </div>
-                    <button
-                      id="btn-reset-filters"
-                      onClick={() => {
-                        setSearchTerm("");
-                        setBoeReference("");
-                        setStatus("Todos");
-                        setGroup("Todos");
-                        setAdminType("Todos");
-                        setRegion("Todos");
-                        setDisabilityQuota("Todos");
-                        setExamType("Todos");
-                        setMinDegree("Todos");
-                      }}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer transition-all inline-block"
-                    >
-                      Restablecer Todos los Filtros
-                    </button>
-                  </div>
-                )}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Estado de Convocatoria (Plazo)
+                </label>
+                <select
+                  id="search-select-status"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100/50 focus:bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                >
+                  <option value="Todos">Todos los plazos</option>
+                  <option value="Abierto">Abierto (Plazo de inscripción)</option>
+                  <option value="Cerrado">Cerrado / En curso</option>
+                  <option value="Próxima Convocatoria">Próxima Convocatoria</option>
+                </select>
               </div>
             </div>
+
+            {/* Extended Filters Collapsible Area */}
+            <div className="pt-4 border-t border-gray-100 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">
+                  Grupo de Titulación
+                </label>
+                <select
+                  id="filter-group"
+                  value={group}
+                  onChange={(e) => setGroup(e.target.value)}
+                  className="w-full px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="Todos">Todos (A1, A2, C1, C2)</option>
+                  <option value="A1">Grupo A1 (Superior)</option>
+                  <option value="A2">Grupo A2 (Técnico)</option>
+                  <option value="C1">Grupo C1 (Bachiller)</option>
+                  <option value="C2">Grupo C2 (ESO)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">
+                  Organismo Emisor
+                </label>
+                <select
+                  id="filter-admin"
+                  value={adminType}
+                  onChange={(e) => setAdminType(e.target.value)}
+                  className="w-full px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="Todos">Todos los organismos</option>
+                  <option value="Estatal">Administración del Estado</option>
+                  <option value="Autonómica">Autonómica / CC.AA.</option>
+                  <option value="Local">Ayuntamiento / Local</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">
+                  Comunidad Autónoma
+                </label>
+                <select
+                  id="filter-region"
+                  value={region}
+                  onChange={(e) => setRegion(e.target.value)}
+                  className="w-full px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  {regionsList.map((reg) => (
+                    <option key={reg} value={reg}>
+                      {reg === "Todos" ? "Cualquier región" : reg}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">
+                  Cupo Discapacidad
+                </label>
+                <select
+                  id="filter-disability"
+                  value={disabilityQuota}
+                  onChange={(e) => setDisabilityQuota(e.target.value)}
+                  className="w-full px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="Todos">Todos</option>
+                  <option value="Sí">Reserva específica (Sí)</option>
+                  <option value="No">Sin reserva especial</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">
+                  Tipo de Examen
+                </label>
+                <select
+                  id="filter-exam-type"
+                  value={examType}
+                  onChange={(e) => setExamType(e.target.value)}
+                  className="w-full px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="Todos">Todos</option>
+                  <option value="Oposición">Oposición pura</option>
+                  <option value="Concurso">Concurso-Oposición</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">
+                  Titulación Mínima
+                </label>
+                <select
+                  id="filter-degree"
+                  value={minDegree}
+                  onChange={(e) => setMinDegree(e.target.value)}
+                  className="w-full px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="Todos">Todas</option>
+                  <option value="Bachillerato">Bachillerato / FP</option>
+                  <option value="Educación Secundaria">ESO o equivalente</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Main body: lists matched results in full-width as requested by the user */}
+          <div className="w-full space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-500 font-semibold">
+                Se han encontrado {filteredOppositions.length} oposiciones en el catálogo de estudio que coinciden con los filtros
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              {filteredOppositions.length > 0 ? (
+                filteredOppositions.map((opp) => {
+                  const isSelected = selectedOppositionId === opp.id;
+                  return (
+                    <div
+                      key={opp.id}
+                      id={`opp-card-${opp.id}`}
+                      className={`p-5 rounded-2xl border transition-all ${
+                        isSelected
+                          ? "bg-indigo-50/50 border-indigo-400 shadow-sm"
+                          : "bg-white border-gray-100 hover:border-gray-300 hover:shadow-xs"
+                      }`}
+                    >
+                      <div className="flex flex-wrap justify-between items-start gap-2">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-indigo-100 text-indigo-800 uppercase">
+                              Grupo {opp.group}
+                            </span>
+                            <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-slate-100 text-slate-700">
+                              {opp.adminType}
+                            </span>
+                            <span
+                              className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
+                                opp.status === "Abierto"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-gray-100 text-gray-800"
+                              }`}
+                            >
+                              Plazo: {opp.status}
+                            </span>
+                          </div>
+                          <h3 className="text-base font-extrabold text-gray-900 pt-1">
+                            {opp.name} ({opp.shortName})
+                          </h3>
+                        </div>
+
+                        <button
+                          id={`btn-select-opp-${opp.id}`}
+                          onClick={() => onSelectOpposition(opp.id)}
+                          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                            isSelected
+                              ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                              : "bg-slate-100 text-slate-800 hover:bg-slate-200"
+                          }`}
+                        >
+                          {isSelected ? "Oposición Seleccionada" : "Seleccionar para Estudio"}
+                        </button>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-50 text-xs text-slate-600">
+                        <div className="space-y-0.5">
+                          <span className="text-gray-400 block font-semibold text-[10px] uppercase">
+                            Referencia BOE
+                          </span>
+                          <span className="font-mono text-slate-800 font-semibold">{opp.card.referenceBOE}</span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <span className="text-gray-400 block font-semibold text-[10px] uppercase">
+                            Ámbito Geográfico
+                          </span>
+                          <span className="flex items-center gap-1 text-slate-800 font-semibold">
+                            <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                            {opp.region}
+                          </span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <span className="text-gray-400 block font-semibold text-[10px] uppercase">
+                            Plazas Ofrecidas
+                          </span>
+                          <strong className="text-indigo-600 font-bold text-sm">
+                            {opp.card.vacancies.toLocaleString()} plazas
+                          </strong>
+                        </div>
+                        <div className="space-y-0.5">
+                          <span className="text-gray-400 block font-semibold text-[10px] uppercase">
+                            Fecha Límite
+                          </span>
+                          <span className="flex items-center gap-1 text-slate-800 font-semibold">
+                            <Calendar className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                            {opp.card.deadline}
+                          </span>
+                        </div>
+                      </div>
+
+                      {opp.card.legislativeWarning && (
+                        <div className="mt-4 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs leading-relaxed">
+                          <strong>Recomendación Legislativa:</strong> {opp.card.legislativeWarning}
+                        </div>
+                      )}
+
+                      <div className="mt-3.5 flex justify-between items-center text-xs">
+                        <a
+                          href={opp.card.officialLink}
+                          target="_blank"
+                          referrerPolicy="no-referrer"
+                          className="text-indigo-600 hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          Enlace Oficial a la Convocatoria <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-10 text-center bg-slate-50 border border-dashed border-slate-200 rounded-3xl space-y-3.5 max-w-md mx-auto">
+                  <AlertTriangle className="w-6 h-6 text-slate-400 mx-auto" />
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900">No se encontraron oposiciones</h4>
+                    <p className="text-[11px] text-slate-500 leading-normal mt-0.5">
+                      No hay ninguna convocatoria en nuestro catálogo local que coincida con los filtros activos.
+                    </p>
+                  </div>
+                  <button
+                    id="btn-reset-filters"
+                    onClick={() => {
+                      setSearchTerm("");
+                      setBoeReference("");
+                      setStatus("Todos");
+                      setGroup("Todos");
+                      setAdminType("Todos");
+                      setRegion("Todos");
+                      setDisabilityQuota("Todos");
+                      setExamType("Todos");
+                      setMinDegree("Todos");
+                    }}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer transition-all inline-block"
+                  >
+                    Restablecer Todos los Filtros
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        /* Pestaña de Alertas BOE en Directo */
+        <div className="space-y-4">
+          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row gap-4 items-end">
+              <div className="flex-1">
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Filtrar Alertas BOE por Palabra Clave
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 w-4.5 h-4.5 text-gray-400" />
+                  <input
+                    id="search-input-rss"
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Ej: Justicia, Hacienda, Administrativo, Valenciana..."
+                    className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 hover:bg-gray-100/50 focus:bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  />
+                </div>
+              </div>
+              <button
+                id="btn-refresh-rss"
+                onClick={fetchRssFeed}
+                disabled={loadingRss}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 h-10 shrink-0 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingRss ? "animate-spin" : ""}`} />
+                Actualizar Feed BOE
+              </button>
+            </div>
+
+            {rssError && (
+              <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>{rssError}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-500 font-semibold">
+                Mostrando {filteredRssItems.length} anuncios oficiales de empleo público en el boletín en tiempo real
+              </span>
+            </div>
+
+            {loadingRss ? (
+              <div className="p-10 text-center bg-white border border-gray-100 rounded-2xl space-y-3">
+                <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
+                <p className="text-xs text-gray-500">Conectando y analizando Boletín Oficial del Estado (BOE)...</p>
+              </div>
+            ) : filteredRssItems.length > 0 ? (
+              <div className="grid grid-cols-1 gap-4">
+                {filteredRssItems.map((item, index) => (
+                  <div
+                    key={index}
+                    id={`rss-card-${index}`}
+                    className="p-5 bg-white border border-gray-100 hover:border-gray-300 rounded-2xl shadow-xs hover:shadow-md transition-all space-y-2"
+                  >
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wider">
+                            BOE Oficial
+                          </span>
+                          <span className="text-[10px] text-gray-400 font-semibold">
+                            {item.pubDate ? new Date(item.pubDate).toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" }) : "Fecha no disponible"}
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-extrabold text-slate-900 leading-snug">
+                          {item.title}
+                        </h4>
+                      </div>
+                      <a
+                        href={item.link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 rounded-lg border border-slate-200 hover:border-indigo-200 transition-all cursor-pointer shrink-0"
+                        title="Ver BOE original"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    </div>
+                    {item.description && (
+                      <p className="text-xs text-slate-600 leading-relaxed bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                        {item.description}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-10 text-center bg-slate-50 border border-dashed border-slate-200 rounded-3xl space-y-3.5 max-w-md mx-auto">
+                <AlertTriangle className="w-6 h-6 text-slate-400 mx-auto" />
+                <div>
+                  <h4 className="text-sm font-extrabold text-slate-900">No se encontraron alertas</h4>
+                  <p className="text-[11px] text-slate-500 leading-normal mt-0.5">
+                    Ninguno de los anuncios del BOE coincide con tu palabra clave de búsqueda.
+                  </p>
+                </div>
+                <button
+                  id="btn-reset-rss-search"
+                  onClick={() => setSearchTerm("")}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer transition-all inline-block"
+                >
+                  Limpiar búsqueda
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

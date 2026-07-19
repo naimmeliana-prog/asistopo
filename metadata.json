@@ -1,0 +1,6 @@
+{
+  "name": "Asistente de Oposiciones",
+  "description": "Asistente inteligente y offline-first de preparación de oposiciones estatales, autonómicas, locales y universitarias con acceso directo a fuentes del BOE y administración pública.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

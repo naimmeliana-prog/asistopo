@@ -32,6 +32,129 @@ function getAI(): GoogleGenAI {
   return aiInstance;
 }
 
+// Helper function to check if search result matches search query
+function matchesQuery(title: string, description: string, query: string): boolean {
+  if (!query || !query.trim()) return true;
+  
+  const normalize = (str: string) => {
+    return str
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9\s]/g, "");
+  };
+
+  const normalizedTitle = normalize(title);
+  const normalizedDesc = normalize(description);
+  const normalizedQuery = normalize(query);
+
+  const queryWords = normalizedQuery.split(/\s+/).filter(w => w.length > 0);
+  if (queryWords.length === 0) return true;
+
+  const stopWords = ["de", "la", "el", "en", "y", "o", "a", "un", "una", "del", "al", "para", "con", "por"];
+  const significantWords = queryWords.filter(w => !stopWords.includes(w) || queryWords.length === 1);
+  const wordsToSearch = significantWords.length > 0 ? significantWords : queryWords;
+
+  return wordsToSearch.some(word => normalizedTitle.includes(word) || normalizedDesc.includes(word));
+}
+
+// Unified generator helper that handles Gemini (primary) and OpenRouter (secondary/fallback)
+async function generateAISchema(params: {
+  prompt: string;
+  systemInstruction: string;
+  responseMimeType?: "application/json" | "text/plain";
+  useSearch?: boolean;
+}): Promise<string> {
+  const { prompt, systemInstruction, responseMimeType = "application/json", useSearch = false } = params;
+
+  const hasGemini = !!process.env.GEMINI_API_KEY;
+  const hasOpenRouter = !!process.env.OPENROUTER_API_KEY;
+
+  if (!hasGemini && !hasOpenRouter) {
+    throw new Error("No AI API keys configured on the server. Please define GEMINI_API_KEY or OPENROUTER_API_KEY.");
+  }
+
+  // 1. Try Gemini first (if key is configured)
+  if (hasGemini) {
+    try {
+      console.log("Calling primary Gemini API...");
+      const ai = getAI();
+      const config: any = {
+        responseMimeType,
+        systemInstruction,
+      };
+      if (useSearch) {
+        config.tools = [{ googleSearch: {} }];
+      }
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config,
+      });
+
+      if (response && response.text) {
+        return response.text;
+      }
+      throw new Error("Empty response returned from Gemini");
+    } catch (err: any) {
+      console.warn("Gemini API call failed, checking fallback options:", err.message || err);
+      if (!hasOpenRouter) {
+        throw err;
+      }
+      console.log("Gemini API failed or rate-limited. Falling back to OpenRouter...");
+    }
+  }
+
+  // 2. Fall back to OpenRouter (if key is configured)
+  if (hasOpenRouter) {
+    try {
+      console.log("Calling OpenRouter API fallback...");
+      const model = "google/gemini-2.5-flash"; // Excellent general model supporting JSON mode
+      
+      const body: any = {
+        model,
+        messages: [
+          { role: "system", content: systemInstruction },
+          { role: "user", content: prompt }
+        ],
+      };
+
+      if (responseMimeType === "application/json") {
+        body.response_format = { type: "json_object" };
+      }
+
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": process.env.APP_URL || "http://localhost:3000",
+          "X-Title": "OpoIA",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OpenRouter HTTP error! status: ${response.status} - ${errorText}`);
+      }
+
+      const data: any = await response.json();
+      const text = data.choices?.[0]?.message?.content;
+      if (text) {
+        return text;
+      }
+      throw new Error("No text content returned from OpenRouter choices");
+    } catch (err: any) {
+      console.error("OpenRouter API fallback call failed:", err);
+      throw err;
+    }
+  }
+
+  throw new Error("Failed to generate response from any configured AI engine.");
+}
+
 // Ensure the endpoints are registered before Vite middleware
 app.get("/api/health", (req: Request, res: Response) => {
   res.json({ status: "ok", time: new Date().toISOString() });
@@ -165,15 +288,19 @@ app.get("/api/boe-rss", async (req: Request, res: Response) => {
   const query = (req.query.q as string || "").trim();
   try {
     // 1. ALWAYS query the live official BOE XML Search API as the primary source first
-    const items = await fetchBoeRealSearch(query);
+    let items = await fetchBoeRealSearch(query);
+    if (query) {
+      // Apply strict keyword matching to prevent BOE's general fallback list from polluting custom queries (like "ingeniero técnico")
+      items = items.filter(item => matchesQuery(item.title, item.description, query));
+    }
+
     if (items && items.length > 0) {
       res.json({ items });
       return;
     }
 
-    // 2. Fall back to Gemini Web Grounding if direct search didn't yield items
-    console.log("No items from direct BOE search, attempting Gemini fallback...");
-    const ai = getAI();
+    // 2. Fall back to Gemini/OpenRouter Web Grounding if direct search didn't yield items
+    console.log("No items from direct BOE search, attempting AI Grounding fallback...");
     let prompt = "";
 
     if (query) {
@@ -223,17 +350,13 @@ REGLAS CRÍTICAS:
 No agregues explicaciones fuera del JSON. Devuelve únicamente el objeto JSON.`;
     }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        systemInstruction: "Eres un buscador y agregador en tiempo real de convocatorias de empleo público (oposiciones) reales de España (BOE y boletines autonómicos oficiales). Utilizas la búsqueda web para recopilar únicamente convocatorias de empleo público verídicas y las formateas exactamente como un objeto JSON según el esquema especificado.",
-      },
+    const text = await generateAISchema({
+      prompt,
+      systemInstruction: "Eres un buscador y agregador en tiempo real de convocatorias de empleo público (oposiciones) reales de España (BOE y boletines autonómicos oficiales). Utilizas la búsqueda web para recopilar únicamente convocatorias de empleo público verídicas y las formateas exactamente como un objeto JSON según el esquema especificado.",
+      responseMimeType: "application/json",
+      useSearch: true
     });
 
-    const text = response.text || "{}";
     const data = JSON.parse(text);
     const geminiItems = data.items || [];
     res.json({ items: geminiItems });
@@ -270,7 +393,7 @@ No agregues explicaciones fuera del JSON. Devuelve únicamente el objeto JSON.`;
         title: "Servicio de Salud de las Islas Baleares (Ibsalut) - 115 plazas de Celador / Celadora de Atención Primaria",
         link: "https://www.caib.es/govern/organigrama/area.do?codi=239&lang=es",
         pubDate: "2026-06-28T11:00:00Z",
-        description: "Bolsa unificada de empleo público y oposiciones para celadores sanitarios y de atención primaria en Mallorca, Menorca, Ibiza y Formentera."
+        description: "Bolsa unificada de empleo público y oposiciones para celadores sanitarios and de atención primaria en Mallorca, Menorca, Ibiza y Formentera."
       },
       {
         title: "Servicio Aragonés de Salud (SALUD) - Bolsa de Empleo y Convocatoria de Celador / Celadora Sanitaria",
@@ -349,7 +472,7 @@ No agregues explicaciones fuera del JSON. Devuelve únicamente el objeto JSON.`;
         const descNormalized = item.description.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         return titleNormalized.includes(cleanQuery) || descNormalized.includes(cleanQuery);
       });
-      res.json({ items: filtered.length > 0 ? filtered : fallbackList.slice(0, 4) });
+      res.json({ items: filtered });
     } else {
       res.json({ items: fallbackList });
     }
@@ -365,7 +488,6 @@ app.post("/api/gemini/generate-plan", async (req: Request, res: Response) => {
       return;
     }
 
-    const ai = getAI();
     const prompt = `Actúa como un tutor experto de oposiciones en España. Genera un Plan de Estudio Personalizado y Dinámico para la oposición "${opposition}".
 Datos del Opositor:
 - Perfil: ${JSON.stringify(profile)}
@@ -397,16 +519,12 @@ Genera una respuesta en formato JSON con la siguiente estructura exacta:
   ]
 }`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        systemInstruction: "Eres un asesor pedagógico de oposiciones españolas altamente cualificado. Proporcionas respuestas estructuradas en estricto formato JSON.",
-      },
+    const text = await generateAISchema({
+      prompt,
+      systemInstruction: "Eres un asesor pedagógico de oposiciones españolas altamente cualificado. Proporcionas respuestas estructuradas en estricto formato JSON.",
+      responseMimeType: "application/json"
     });
 
-    const text = response.text || "{}";
     res.json(JSON.parse(text));
   } catch (error: any) {
     console.error("Error in generate-plan:", error);
@@ -423,7 +541,6 @@ app.post("/api/gemini/generate-custom-opposition", async (req: Request, res: Res
       return;
     }
 
-    const ai = getAI();
     const prompt = `Actúa como un preparador experto de oposiciones en España.
 A partir del siguiente anuncio oficial de empleo público del BOE:
 Título: "${title}"
@@ -527,16 +644,12 @@ IMPORTANTE: El temario específico (temas y títulos), los requisitos y el supue
 
 Responde ÚNICAMENTE con el objeto JSON estructurado sin envoltorios extra de markdown.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        systemInstruction: "Eres un preparador experto y administrador oficial de temarios para oposiciones en España. Generas temarios rigurosos y personalizados en estricto formato JSON.",
-      },
+    const text = await generateAISchema({
+      prompt,
+      systemInstruction: "Eres un preparador experto y administrador oficial de temarios para oposiciones en España. Generas temarios rigurosos y personalizados en estricto formato JSON.",
+      responseMimeType: "application/json"
     });
 
-    const text = response.text || "{}";
     res.json(JSON.parse(text));
   } catch (error: any) {
     console.error("Error in generate-custom-opposition:", error);
@@ -553,7 +666,6 @@ app.post("/api/gemini/generate-case-study", async (req: Request, res: Response) 
       return;
     }
 
-    const ai = getAI();
     const prompt = `Actúa como el Tribunal de Oposiciones de "${opposition}". Genera un Supuesto Práctico Realista basado en los siguientes bloques/temas: ${blocks ? blocks.join(", ") : "Temario general"}.
 El supuesto debe incluir una situación de hecho detallada, 3 preguntas complejas de desarrollo o respuesta múltiple que el tribunal plantearía, y sus respectivas soluciones justificadas legalmente (con mención a leyes como Ley 39/2015, Ley 40/2015, Constitución, etc. según corresponda).
 
@@ -572,16 +684,12 @@ Genera una respuesta en formato JSON con la siguiente estructura exacta:
   "tipsForTribunal": "Qué valora especialmente el tribunal en este caso (precisión terminológica, etc.)."
 }`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        systemInstruction: "Eres un miembro de un tribunal de oposiciones en España. Diseñas supuestos prácticos de alta exigencia legal y técnica. Estricto formato JSON.",
-      },
+    const text = await generateAISchema({
+      prompt,
+      systemInstruction: "Eres un miembro de un tribunal de oposiciones en España. Diseñas supuestos prácticos de alta exigencia legal y técnica. Estricto formato JSON.",
+      responseMimeType: "application/json"
     });
 
-    const text = response.text || "{}";
     res.json(JSON.parse(text));
   } catch (error: any) {
     console.error("Error in generate-case-study:", error);
@@ -598,7 +706,6 @@ app.post("/api/gemini/generate-mnemonic", async (req: Request, res: Response) =>
       return;
     }
 
-    const ai = getAI();
     const prompt = `Genera técnicas de mnemotecnia ultra-efectivas para retener el siguiente concepto complejo en oposiciones: "${concept}".
 Contexto de la oposición: ${context || "Leyes generales del Estado"}.
 
@@ -619,16 +726,12 @@ Genera una respuesta en formato JSON con la siguiente estructura exacta:
   "retentionTestQuestion": "Una pregunta rápida de autoevaluación para verificar que se ha memorizado."
 }`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        systemInstruction: "Eres un experto en memorización de alto rendimiento para opositores (técnicas de supermemoria y mnemotecnia). Estricto formato JSON.",
-      },
+    const text = await generateAISchema({
+      prompt,
+      systemInstruction: "Eres un experto en memorización de alto rendimiento para opositores (técnicas de supermemoria y mnemotecnia). Estricto formato JSON.",
+      responseMimeType: "application/json"
     });
 
-    const text = response.text || "{}";
     res.json(JSON.parse(text));
   } catch (error: any) {
     console.error("Error in generate-mnemonic:", error);
@@ -645,7 +748,6 @@ app.post("/api/gemini/analyze-patterns", async (req: Request, res: Response) => 
       return;
     }
 
-    const ai = getAI();
     const prompt = `Analiza patrones de preguntas difíciles, confusas o "trampa" en los exámenes de la oposición "${opposition}" desde el año ${startYear || 2020}.
 Determina qué tipo de trucos utiliza el tribunal (modificar plazos ligeramente, cambiar palabras como 'podrá' por 'deberá', falsas excepciones, etc.) y aporta 3 ejemplos prácticos con explicaciones detalladas.
 
@@ -670,16 +772,12 @@ Genera una respuesta en formato JSON con la siguiente estructura exacta:
   "keyAdvice": "Consejo maestro para enfrentarse al test del tribunal sin caer en el pánico."
 }`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        systemInstruction: "Eres un preparador de oposiciones especializado en detectar los vicios, sesgos y trampas habituales de los tribunales examinadores. Estricto formato JSON.",
-      },
+    const text = await generateAISchema({
+      prompt,
+      systemInstruction: "Eres un preparador de oposiciones especializado en detectar los vicios, sesgos y trampas habituales de los tribunales examinadores. Estricto formato JSON.",
+      responseMimeType: "application/json"
     });
 
-    const text = response.text || "{}";
     res.json(JSON.parse(text));
   } catch (error: any) {
     console.error("Error in analyze-patterns:", error);
@@ -696,7 +794,6 @@ app.post("/api/gemini/generate-test", async (req: Request, res: Response) => {
       return;
     }
 
-    const ai = getAI();
     const prompt = `Genera un cuestionario de test de nivel ${difficulty || "Medio"} para la oposición de "${opposition}".
 Temas/Bloques seleccionados: ${blocks ? blocks.join(", ") : "Todo el temario"}.
 Cantidad de preguntas: ${count || 5}.
@@ -714,16 +811,12 @@ Genera una respuesta en formato JSON con la siguiente estructura exacta de lista
   ]
 }`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        systemInstruction: "Eres un generador oficial de cuestionarios técnicos para oposiciones del estado, comunidades autónomas y locales de España. Estricto formato JSON.",
-      },
+    const text = await generateAISchema({
+      prompt,
+      systemInstruction: "Eres un generador oficial de cuestionarios técnicos para oposiciones del estado, comunidades autónomas y locales de España. Estricto formato JSON.",
+      responseMimeType: "application/json"
     });
 
-    const text = response.text || '{"questions": []}';
     res.json(JSON.parse(text));
   } catch (error: any) {
     console.error("Error in generate-test:", error);
@@ -740,7 +833,6 @@ app.post("/api/gemini/generate-full-topic", async (req: Request, res: Response) 
       return;
     }
 
-    const ai = getAI();
     const prompt = `Actúa como un catedrático de Derecho y preparador de alto nivel para la oposición de "${opposition || "Administración Pública"}".
 Genera una lección de estudio EXHAUSTIVA y COMPLETA para el tema: "${topicTitle}".
 Leyes y artículos de referencia obligatoria: ${articles ? articles.join(", ") : "Leyes conexas"}.
@@ -768,16 +860,12 @@ Genera la respuesta como un objeto JSON con la estructura exacta descrita a cont
   ]
 }`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        systemInstruction: "Eres un preparador de élite y jurista experto que redacta temas de oposición completos, rigurosos y muy detallados. El formato del contenido detallado es Markdown limpio. Estricto formato JSON.",
-      },
+    const text = await generateAISchema({
+      prompt,
+      systemInstruction: "Eres un preparador de élite y jurista experto que redacta temas de oposición completos, rigurosos y muy detallados. El formato del contenido detallado es Markdown limpio. Estricto formato JSON.",
+      responseMimeType: "application/json"
     });
 
-    const text = response.text || "{}";
     res.json(JSON.parse(text));
   } catch (error: any) {
     console.error("Error in generate-full-topic:", error);
@@ -794,7 +882,6 @@ app.post("/api/gemini/generate-article-text", async (req: Request, res: Response
       return;
     }
 
-    const ai = getAI();
     const prompt = `Actúa como un preparador experto en oposiciones en España y jurista de élite.
 Genera el texto literal oficial y un comentario técnico profundo para el articulado de referencia: "${articleReference}".
 Oposición de destino: "${opposition || "Administración Pública"}".
@@ -813,16 +900,12 @@ Genera la respuesta como un objeto JSON con la estructura exacta descrita a cont
   ]
 }`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        systemInstruction: "Eres un jurista experto y preparador de oposiciones que redacta los textos oficiales de las leyes españolas con precisión quirúrgica y añade comentarios formativos de alta calidad. Estricto formato JSON.",
-      },
+    const text = await generateAISchema({
+      prompt,
+      systemInstruction: "Eres un jurista experto y preparador de oposiciones que redacta los textos oficiales de las leyes españolas con precisión quirúrgica y añade comentarios formativos de alta calidad. Estricto formato JSON.",
+      responseMimeType: "application/json"
     });
 
-    const text = response.text || '{"articles": []}';
     res.json(JSON.parse(text));
   } catch (error: any) {
     console.error("Error in generate-article-text:", error);
@@ -839,7 +922,6 @@ app.post("/api/gemini/search-external", async (req: Request, res: Response) => {
       return;
     }
 
-    const ai = getAI();
     const prompt = `Localiza o genera información real y actualizada sobre la oposición en España correspondiente a la consulta: "${query}".
 Utiliza Google Search para fundamentar las plazas, el boletín (BOE/DOGV/BOCM/etc.), los requisitos oficiales, plazos y el temario oficial del cuerpo.
 
@@ -913,17 +995,13 @@ Devuelve la información estrictamente en formato JSON que represente una oposic
 
 Asegúrate de que la respuesta sea un JSON perfectamente válido y que el syllabus tenga al menos 2 bloques con temas estructurados que el usuario pueda navegar y estudiar directamente en la app.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        systemInstruction: "Eres un buscador y preparador de oposiciones oficiales en España de última generación. Empleas herramientas de búsqueda web para recopilar datos auténticos sobre plazas, requisitos, BOEs y temarios, y los formateas exactamente como un objeto JSON según el esquema de OppositionData.",
-      },
+    const text = await generateAISchema({
+      prompt,
+      systemInstruction: "Eres un buscador y preparador de oposiciones oficiales en España de última generación. Empleas herramientas de búsqueda web para recopilar datos auténticos sobre plazas, requisitos, BOEs y temarios, y los formateas exactamente como un objeto JSON según el esquema de OppositionData.",
+      responseMimeType: "application/json",
+      useSearch: true
     });
 
-    const text = response.text || "{}";
     const data = JSON.parse(text);
     res.json(data);
   } catch (error: any) {

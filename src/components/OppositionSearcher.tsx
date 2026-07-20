@@ -1,43 +1,21 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { OppositionData } from "../types";
-import { Search, RefreshCw, ExternalLink, MapPin, AlertTriangle, Sparkles, Loader2, CheckCircle, Info } from "lucide-react";
-import { generateClientOpposition } from "../lib/clientAiGenerator";
+import { Search, RefreshCw, ExternalLink, MapPin, AlertTriangle, FileText, Loader2, CheckCircle } from "lucide-react";
 
 interface RSSItem {
   title: string;
   link: string;
   pubDate: string;
   description: string;
+  pdfUrl?: string;
+  htmlUrl?: string;
 }
 
-// Local cache helpers to store and load previous real search results
-const getSearchCache = (): RSSItem[] => {
-  try {
-    const saved = localStorage.getItem("opo_searched_items_cache");
-    return saved ? JSON.parse(saved) : [];
-  } catch (e) {
-    console.warn("Error parsing search cache", e);
-    return [];
-  }
-};
-
-const saveToSearchCache = (items: RSSItem[]) => {
-  try {
-    const current = getSearchCache();
-    const merged = [...current];
-    items.forEach(newItem => {
-      const exists = merged.some(existing => 
-        existing.title.trim().toLowerCase() === newItem.title.trim().toLowerCase()
-      );
-      if (!exists) {
-        merged.push(newItem);
-      }
-    });
-    localStorage.setItem("opo_searched_items_cache", JSON.stringify(merged));
-  } catch (e) {
-    console.warn("Error saving to search cache", e);
-  }
-};
+interface MaterialFile {
+  label: string;
+  url: string;
+  type: string;
+}
 
 interface OppositionSearcherProps {
   onSelectOpposition: (id: string) => void;
@@ -58,10 +36,11 @@ export default function OppositionSearcher({
   const [loadingRss, setLoadingRss] = useState(false);
   const [rssError, setRssError] = useState("");
   const [isOfflineMode, setIsOfflineMode] = useState(false);
-
-  // Custom opposition import state
-  const [importingTitle, setImportingTitle] = useState<string | null>(null);
-  const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
+  const [selectedItemForMaterials, setSelectedItemForMaterials] = useState<RSSItem | null>(null);
+  const [materialFiles, setMaterialFiles] = useState<MaterialFile[]>([]);
+  const [materialTitle, setMaterialTitle] = useState<string | null>(null);
+  const [loadingMaterials, setLoadingMaterials] = useState(false);
+  const [materialError, setMaterialError] = useState<string | null>(null);
 
   // Accent and diacritic-insensitive normalization for Spanish searches
   const normalizeString = (str: string): string => {
@@ -71,53 +50,27 @@ export default function OppositionSearcher({
       .replace(/[\u0300-\u036f]/g, "");
   };
 
-  const handleImportOpposition = async (item: RSSItem) => {
-    setImportingTitle(item.title);
-    setImportSuccessMessage(null);
+  const handleFetchOfficialMaterials = async (item: RSSItem) => {
+    setSelectedItemForMaterials(item);
+    setMaterialFiles([]);
+    setMaterialError(null);
+    setLoadingMaterials(true);
+
     try {
-      let data: any = null;
-      try {
-        const response = await fetch("/api/gemini/generate-custom-opposition", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: item.title, description: item.description }),
-        });
-        if (response.ok) {
-          data = await response.json();
-        }
-      } catch (apiErr) {
-        console.warn("Backend API not reachable. Using client-side AI generator.", apiErr);
+      const response = await fetch(`/api/boe-material?link=${encodeURIComponent(item.link)}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || "No se pudo obtener el material oficial.");
       }
 
-      // If backend fails, use our client-side generator to guarantee 100% operation
-      if (!data) {
-        data = generateClientOpposition(item.title, item.description);
-      }
-      
-      if (!data.id) {
-        data.id = normalizeString(item.title)
-          .replace(/[^a-zA-Z0-9\s-]/g, "")
-          .trim()
-          .replace(/\s+/g, "-")
-          .toLowerCase()
-          .slice(0, 50);
-      }
-      
-      onAddCustomOpposition(data);
-      setImportSuccessMessage(`¡Éxito! "${data.shortName || data.name}" se ha añadido al Catálogo y se ha seleccionado automáticamente para su estudio.`);
-      
-      // Auto-select immediately
-      onSelectOpposition(data.id);
-      
-      // Clear success message after 5 seconds
-      setTimeout(() => {
-        setImportSuccessMessage(null);
-      }, 5000);
-    } catch (err: any) {
-      console.error(err);
-      alert("Hubo un error al generar la oposición: " + err.message);
+      const data = await response.json();
+      setMaterialTitle(data.title || item.title);
+      setMaterialFiles(Array.isArray(data.materialFiles) ? data.materialFiles : []);
+    } catch (error: any) {
+      console.error(error);
+      setMaterialError(error.message || "No se pudo cargar el material oficial.");
     } finally {
-      setImportingTitle(null);
+      setLoadingMaterials(false);
     }
   };
 
@@ -135,8 +88,6 @@ export default function OppositionSearcher({
         throw new Error("No se pudo obtener el feed de BOE.");
       }
       const data = await response.json();
-      setIsOfflineMode(false);
-      
       let fetchedItems: RSSItem[] = [];
       if (data && Array.isArray(data.items)) {
         fetchedItems = data.items;
@@ -154,26 +105,10 @@ export default function OppositionSearcher({
       }
       
       setRssItems(fetchedItems);
-      if (fetchedItems.length > 0) {
-        saveToSearchCache(fetchedItems);
-      }
     } catch (err: any) {
-      console.warn("API Error, falling back to cached historical search results:", err);
-      setIsOfflineMode(true);
-      
-      // Perform dynamic filtering on real previous successful search results from cache
-      const cache = getSearchCache();
-      const actualQuery = typeof searchQuery === "string" ? searchQuery.trim() : searchTerm.trim();
-      if (actualQuery) {
-        const normalizedQuery = normalizeString(actualQuery);
-        const filtered = cache.filter(item => 
-          normalizeString(item.title).includes(normalizedQuery) || 
-          normalizeString(item.description).includes(normalizedQuery)
-        );
-        setRssItems(filtered);
-      } else {
-        setRssItems(cache);
-      }
+      console.error("Error fetching BOE data:", err);
+      setRssError("No se pudo obtener resultados desde el BOE. Comprueba tu conexión o intenta otra consulta.");
+      setRssItems([]);
     } finally {
       setLoadingRss(false);
     }
@@ -186,11 +121,7 @@ export default function OppositionSearcher({
     return () => clearTimeout(delayDebounceFn);
   }, [searchTerm]);
 
-  const filteredRssItems = useMemo(() => {
-    // The backend now queries the live official BOE XML API in real time and returns pre-filtered
-    // matches for the user's specific query. We return rssItems directly to avoid over-filtering.
-    return rssItems;
-  }, [rssItems]);
+  const filteredRssItems = rssItems;
 
   return (
     <div id="opposition-searcher" className="space-y-6">
@@ -256,13 +187,6 @@ export default function OppositionSearcher({
           )}
         </div>
 
-        {importSuccessMessage && (
-          <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs flex items-start gap-3 shadow-xs">
-            <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-            <span className="font-semibold leading-relaxed">{importSuccessMessage}</span>
-          </div>
-        )}
-
         <div className="w-full space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs text-gray-500 font-semibold">
@@ -273,7 +197,7 @@ export default function OppositionSearcher({
           {loadingRss ? (
             <div className="p-10 text-center bg-white border border-gray-100 rounded-2xl space-y-3">
               <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
-              <p className="text-xs text-gray-500 font-medium font-sans">Buscando convocatorias reales mediante Grounding Web en boletines oficiales...</p>
+              <p className="text-xs text-gray-500 font-medium font-sans">Consultando convocatorias oficiales en tiempo real desde el BOE...</p>
             </div>
           ) : filteredRssItems.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -320,30 +244,51 @@ export default function OppositionSearcher({
                         {item.description}
                       </p>
                     )}
-                    
-                    <div className="flex items-center justify-between pt-2 flex-wrap gap-2 border-t border-gray-50">
-                      <span className="text-[10px] text-gray-400 font-semibold italic flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                        BOE / Boletín Oficial
-                      </span>
-                      <button
-                        id={`btn-import-opo-${index}`}
-                        disabled={importingTitle !== null}
-                        onClick={() => handleImportOpposition(item)}
-                        className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-xs hover:shadow-sm disabled:cursor-not-allowed"
-                      >
-                        {importingTitle === item.title ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                            <span>Analizando...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-3.5 h-3.5 text-indigo-200 animate-pulse" />
-                            <span>Estudiar con IA</span>
-                          </>
-                        )}
-                      </button>
+
+                    <div className="flex flex-col gap-3 pt-2 border-t border-gray-50">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-[10px] text-gray-400 font-semibold italic flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                          BOE / Boletín Oficial
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          <a
+                            href={item.link}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] rounded-xl border border-slate-200 transition-all"
+                          >
+                            Abrir convocatoria oficial
+                          </a>
+                          <button
+                            id={`btn-materials-${index}`}
+                            onClick={() => handleFetchOfficialMaterials(item)}
+                            disabled={loadingMaterials && selectedItemForMaterials?.link === item.link}
+                            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-[10px] rounded-xl transition-all flex items-center gap-1"
+                          >
+                            {loadingMaterials && selectedItemForMaterials?.link === item.link ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                            ) : (
+                              <FileText className="w-3.5 h-3.5 text-white" />
+                            )}
+                            <span>{selectedItemForMaterials?.link === item.link ? "Actualizando material" : "Ver material oficial"}</span>
+                          </button>
+                        </div>
+                      </div>
+                      {(item.pdfUrl || item.htmlUrl) && (
+                        <div className="text-[10px] text-slate-500 space-y-1">
+                          {item.pdfUrl && (
+                            <a href={item.pdfUrl} target="_blank" rel="noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">
+                              Descargar documento oficial en PDF
+                            </a>
+                          )}
+                          {item.htmlUrl && item.htmlUrl !== item.link && (
+                            <a href={item.htmlUrl} target="_blank" rel="noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">
+                              Abrir versión HTML completa
+                            </a>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -369,6 +314,43 @@ export default function OppositionSearcher({
                 >
                   Limpiar búsqueda y mostrar recientes
                 </button>
+              )}
+            </div>
+          )}
+
+          {selectedItemForMaterials && (
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Material oficial para</h3>
+                  <p className="text-xs text-slate-500">{materialTitle || selectedItemForMaterials.title}</p>
+                </div>
+                <a href={selectedItemForMaterials.link} target="_blank" rel="noreferrer" className="text-[10px] uppercase font-semibold text-indigo-600 hover:text-indigo-800">
+                  Abrir página oficial
+                </a>
+              </div>
+
+              {materialError && (
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs">
+                  {materialError}
+                </div>
+              )}
+
+              {!materialError && materialFiles.length === 0 && !loadingMaterials && (
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+                  No se encontraron documentos oficiales descargables en la página. Abre la convocatoria oficial para acceder al temario completo y exámenes anteriores publicados por el BOE.
+                </div>
+              )}
+
+              {materialFiles.length > 0 && (
+                <div className="space-y-3 text-xs text-slate-700">
+                  {materialFiles.map((file, idx) => (
+                    <a key={idx} href={file.url} target="_blank" rel="noreferrer" className="block p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all">
+                      <div className="font-semibold text-slate-900">{file.label}</div>
+                      <div className="text-[10px] text-slate-500">Tipo: {file.type.toUpperCase()}</div>
+                    </a>
+                  ))}
+                </div>
               )}
             </div>
           )}

@@ -14,18 +14,39 @@ function cleanXmlText(str: string): string {
 }
 
 // Helper function to fetch real search results from the BOE search page and parse HTML results
-async function fetchBoeRealSearch(query: string): Promise<any[]> {
+async function fetchBoeRealSearch(query: string, page: number = 1, scope?: string, category?: string, dateFrom?: string): Promise<any[]> {
   try {
     const normalizedQuery = query.trim() || "oposiciones";
     const searchQuery = normalizedQuery.toLowerCase().includes("oposicion")
       ? normalizedQuery
       : `${normalizedQuery} oposiciones`;
 
+    // Add scope filter if provided
+    let finalQuery = searchQuery;
+    if (scope === "nacional") {
+      finalQuery += " estado";
+    } else if (scope === "autonomico") {
+      finalQuery += " comunidad autónoma";
+    } else if (scope === "local") {
+      finalQuery += " ayuntamiento municipio";
+    }
+
+    // Add category filter if provided
+    if (category) {
+      finalQuery += ` ${category}`;
+    }
+
     const params = new URLSearchParams({
       accion: "Buscar",
       bd: "boe",
-      texto: searchQuery,
+      texto: finalQuery,
+      orden: "fecha",
     });
+
+    // Add pagination if supported by BOE
+    if (page > 1) {
+      params.set("pagina", page.toString());
+    }
 
     const url = `https://www.boe.es/buscar/redirector.php?${params.toString()}`;
 
@@ -73,6 +94,16 @@ async function fetchBoeRealSearch(query: string): Promise<any[]> {
         const pubDateMatch = linePub.match(/(\d{2}\/\d{2}\/\d{4})/);
         if (pubDateMatch) {
           const [day, month, year] = pubDateMatch[1].split("/");
+          const isoDate = new Date(`${year}-${month}-${day}`);
+          
+          // Apply date filter if provided
+          if (dateFrom) {
+            const filterDate = new Date(dateFrom);
+            if (isoDate < filterDate) {
+              continue; // Skip items older than filter date
+            }
+          }
+          
           pubDate = `${year}-${month}-${day}T08:00:00Z`;
         }
       }
@@ -89,6 +120,9 @@ async function fetchBoeRealSearch(query: string): Promise<any[]> {
           pubDate,
           description: fullDescription,
           htmlUrl: link,
+          scope: lineDem.toLowerCase().includes("estado") ? "nacional" : 
+                 (lineDem.toLowerCase().includes("comunidad") || lineDem.toLowerCase().includes("junta") || lineDem.toLowerCase().includes("generalitat")) ? "autonomico" : "local",
+          ministry: lineDem,
         });
       }
     }
@@ -121,24 +155,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const query = (req.query.q as string) || "";
+    const page = parseInt(req.query.page as string) || 1;
+    const scope = req.query.scope as string; // "nacional", "autonomico", "local"
+    const category = req.query.category as string; // "A1", "A2", "C1", "C2", etc.
+    const dateFrom = req.query.dateFrom as string; // "YYYY-MM-DD"
 
-    // 1. Query the live official BOE Search API as the primary source
-    let items = await fetchBoeRealSearch(query);
+    // Query the live official BOE Search API as the primary source
+    let items = await fetchBoeRealSearch(query, page, scope, category, dateFrom);
+    
     if (query) {
       // Apply strict keyword matching
       items = items.filter(item => matchesQuery(item.title, item.description, query));
     }
 
-    if (items && items.length > 0) {
-      res.json({ items });
-      return;
+    // Apply scope filter if specified
+    if (scope) {
+      items = items.filter(item => item.scope === scope);
     }
 
     // No fallback to AI or local repositories: return only official BOE results.
-    console.log("No items from direct BOE search for query.");
-    res.json({ items: [] });
+    if (!(items && items.length > 0)) {
+      console.log("No items from direct BOE search for query.");
+    }
+    
+    res.json({ 
+      items,
+      total: items.length,
+      page,
+      hasMore: items.length >= 50, // BOE typically returns ~50 items per page
+    });
   } catch (error: any) {
     console.error("Error in /api/boe-rss:", error);
-    res.json({ items: [] });
+    res.json({ items: [], total: 0, page: 1, hasMore: false });
   }
 }

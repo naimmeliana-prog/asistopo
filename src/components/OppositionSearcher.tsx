@@ -41,6 +41,13 @@ export default function OppositionSearcher({
   const [materialTitle, setMaterialTitle] = useState<string | null>(null);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
   const [materialError, setMaterialError] = useState<string | null>(null);
+  
+  // Filter state
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedScope, setSelectedScope] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Accent and diacritic-insensitive normalization for Spanish searches
   const normalizeString = (str: string): string => {
@@ -74,14 +81,21 @@ export default function OppositionSearcher({
     }
   };
 
-  const fetchRssFeed = async (searchQuery: any = "") => {
+  const fetchRssFeed = async (searchQuery: any = "", page: number = 1) => {
     setLoadingRss(true);
     setRssError("");
     try {
       const actualQuery = typeof searchQuery === "string" ? searchQuery.trim() : searchTerm.trim();
-      const url = actualQuery
-        ? `/api/boe-rss?q=${encodeURIComponent(actualQuery)}`
-        : "/api/boe-rss";
+      
+      // Build query params with filters
+      const params = new URLSearchParams();
+      if (actualQuery) params.append("q", actualQuery);
+      if (selectedScope) params.append("scope", selectedScope);
+      if (selectedCategory) params.append("category", selectedCategory);
+      if (dateFrom) params.append("dateFrom", dateFrom);
+      if (page > 1) params.append("page", page.toString());
+      
+      const url = `/api/boe-rss?${params.toString()}`;
       
       const response = await fetch(url);
       if (!response.ok) {
@@ -105,6 +119,7 @@ export default function OppositionSearcher({
       }
       
       setRssItems(fetchedItems);
+      setCurrentPage(page);
     } catch (err: any) {
       console.error("Error fetching BOE data:", err);
       setRssError("No se pudo obtener resultados desde el BOE. Comprueba tu conexión o intenta otra consulta.");
@@ -116,10 +131,10 @@ export default function OppositionSearcher({
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
-      fetchRssFeed(searchTerm);
+      fetchRssFeed(searchTerm, 1);
     }, 600); // 600ms debounce
     return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm]);
+  }, [searchTerm, selectedScope, selectedCategory, dateFrom]);
 
   const filteredRssItems = rssItems;
 
@@ -177,7 +192,95 @@ export default function OppositionSearcher({
               <RefreshCw className={`w-3.5 h-3.5 ${loadingRss ? "animate-spin" : ""}`} />
               Buscar en Boletines
             </button>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 h-10 shrink-0 cursor-pointer"
+            >
+              ⚙️ Filtros
+            </button>
           </div>
+
+          {/* Filters Section */}
+          {showFilters && (
+            <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Scope Filter */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Ámbito
+                  </label>
+                  <select
+                    value={selectedScope}
+                    onChange={(e) => {
+                      setSelectedScope(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  >
+                    <option value="">Todos los ámbitos</option>
+                    <option value="nacional">Nacional (Estado)</option>
+                    <option value="autonomico">Autonómico</option>
+                    <option value="local">Local (Municipios)</option>
+                  </select>
+                </div>
+
+                {/* Category Filter */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Categoría/Grupo
+                  </label>
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => {
+                      setSelectedCategory(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  >
+                    <option value="">Todos los grupos</option>
+                    <option value="A1">Grupo A1 (Licenciados)</option>
+                    <option value="A2">Grupo A2 (Diplomados)</option>
+                    <option value="C1">Grupo C1 (Técnicos)</option>
+                    <option value="C2">Grupo C2 (Auxiliares)</option>
+                  </select>
+                </div>
+
+                {/* Date Filter */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Desde fecha
+                  </label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => {
+                      setDateFrom(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Clear Filters */}
+              {(selectedScope || selectedCategory || dateFrom) && (
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => {
+                      setSelectedScope("");
+                      setSelectedCategory("");
+                      setDateFrom("");
+                      setCurrentPage(1);
+                      fetchRssFeed(searchTerm, 1);
+                    }}
+                    className="px-3 py-1.5 text-xs bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all"
+                  >
+                    Limpiar filtros
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {rssError && (
             <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center gap-2">

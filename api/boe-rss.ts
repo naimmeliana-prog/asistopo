@@ -113,7 +113,7 @@ async function fetchBoeRealSearch(query: string, page: number = 1, scope?: strin
       const fullDescription = uniqueDescriptionParts.join(" | ").trim();
 
       // FILTER: Only include real opposition convocatorias
-      if (!isRealOpposition(title, fullDescription)) {
+      if (!isRealOpposition(title, fullDescription, query)) {
         continue; // Skip non-opposition results
       }
 
@@ -141,33 +141,37 @@ async function fetchBoeRealSearch(query: string, page: number = 1, scope?: strin
 }
 
 // Helper to filter out non-opposition results (noise)
-function isRealOpposition(title: string, description: string): boolean {
+function isRealOpposition(title: string, description: string, userQuery?: string): boolean {
   const combined = (title + " " + description).toLowerCase();
   
-  // EXCLUSIONS: Resoluciones que NO son oposiciones
-  const excludePatterns = [
-    /relaci[óo]n\s+(?:definitiva|provisional|de\s+aprobados?|de\s+admitidos?|de\s+suplentes?|de\s+personas)/i,
-    /resoluci[óo]n\s+.*\s+(?:nombra|nombre|designa|anula|rectifica|corrige|modifica|revoca)/i,
-    /tribunal\s+(?:calificador|de\s+oposici[óo]n)/i,
-    /correci[óo]n\s+de\s+(?:erratas?|errores?)/i,
-    /aclaraci[óo]n|modific|ampliaci[óo]n|suspensi[óo]n|anulaci[óo]n/i,
+  // STRONG EXCLUSIONS: Very obvious non-opposition items
+  const strongExcludePatterns = [
+    /relaci[óo]n\s+(?:definitiva|provisional|de\s+aprobados?|de\s+admitidos?|de\s+suplentes?)/i,
+    /resoluci[óo]n\s+.*\s+(?:nombra|nombre|designa)(?:\s+funcionarios?)?/i,
+    /tribunal\s+calificador/i,
     /errata|fe\s+de\s+erratas?/i,
-    /unico\s+(?:acto|fase|ejercicio)/i,
-    /resultado(?:s)?\s+(?:de\s+)?(?:la\s+)?(?:prueba|examen|fase)/i,
-    /desestima(?:ci[óo]n)?/i,
-    /inadmisi[óo]n/i,
-    /recurso\s+(?:contencioso|administrativo)/i,
+    /resultado(?:s)?\s+(?:de\s+)?(?:la\s+)?(?:prueba|examen|fase|valoraci[óo]n)/i,
+    /inadmisi[óo]n|desestima(?:ci[óo]n)?/i,
+    /recurso\s+(?:contencioso|administrativo|de\s+alzada)/i,
   ];
   
-  // If matches any exclusion, it's not a real opposition
-  for (const pattern of excludePatterns) {
+  // SOFT EXCLUSIONS: Could be oposición but need more evidence
+  // These patterns are only exclusionary if NOT accompanied by opposition keywords
+  const softExcludePatterns = [
+    /correci[óo]n\s+de\s+(?:erratas?|errores?)/i,
+    /aclaraci[óo]n|ampliaci[óo]n|suspensi[óo]n|anulaci[óo]n/i,
+    /modificaci[óo]n/i,
+  ];
+  
+  // Strong exclusions always filter out
+  for (const pattern of strongExcludePatterns) {
     if (pattern.test(combined)) {
       return false;
     }
   }
   
-  // INCLUSIONS: Must contain at least one indicator of a real opposition
-  const includePatterns = [
+  // INCLUSIONS: Strong indicators of opposition
+  const strongIncludePatterns = [
     /convocatoria\s+(?:de\s+)?oposiciones?/i,
     /oposiciones?\s+(?:libres?|por\s+orden|de\s+promoci[óo]n)/i,
     /plazas?\s+(?:de\s+)?oposici[óo]n/i,
@@ -175,12 +179,47 @@ function isRealOpposition(title: string, description: string): boolean {
     /adjudicaci[óo]n\s+de\s+plazas/i,
     /proceso\s+selectivo/i,
     /prueba(?:s)?\s+selectiva(?:s)?/i,
+    /cuerpo\s+(?:de\s+)?(?:cuerpos?)?\s+\w+\s+(?:oposici[óo]n|selecci[óo]n)/i,
   ];
   
-  // Must match at least one inclusion pattern
-  const hasInclusion = includePatterns.some(pattern => pattern.test(combined));
+  // Check strong inclusions
+  const hasStrongInclusion = strongIncludePatterns.some(pattern => pattern.test(combined));
   
-  return hasInclusion;
+  // WEAKER INCLUSIONS: Common opposition keywords
+  const weakIncludePatterns = [
+    /oposici[óo]n/i,
+    /selecci[óo]n\s+p[úu]blica/i,
+    /empleo\s+p[úu]blico/i,
+  ];
+  
+  const hasWeakInclusion = weakIncludePatterns.some(pattern => pattern.test(combined));
+  
+  // HEURISTIC: If user made a specific query and it appears in title/desc, trust it
+  // (user is looking for "conductor oposiciones" - if BOE returns something with conductor, likely valid)
+  if (userQuery && userQuery.length > 3) {
+    const normalizedQuery = userQuery.toLowerCase()
+      .replace(/\s+oposiciones?/i, "")
+      .trim();
+    
+    if (normalizedQuery.length > 2 && combined.includes(normalizedQuery)) {
+      // User's specific term is in the result, assume it's relevant
+      // But still apply strong exclusions
+      return hasWeakInclusion || hasStrongInclusion || true; // Give benefit of doubt if user's keyword is there
+    }
+  }
+  
+  // For soft exclusions: only apply if we don't have any inclusion signals
+  if (!hasStrongInclusion && !hasWeakInclusion) {
+    for (const pattern of softExcludePatterns) {
+      if (pattern.test(combined)) {
+        return false;
+      }
+    }
+    return false; // Doesn't match any inclusion pattern
+  }
+  
+  // Has some form of opposition indication
+  return hasStrongInclusion || hasWeakInclusion;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -209,7 +248,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       items = items.filter(item => {
         const lowerQuery = query.toLowerCase();
         return (item.title.toLowerCase().includes(lowerQuery) || item.description.toLowerCase().includes(lowerQuery)) &&
-               isRealOpposition(item.title, item.description);
+               isRealOpposition(item.title, item.description, query);
       });
     }
 

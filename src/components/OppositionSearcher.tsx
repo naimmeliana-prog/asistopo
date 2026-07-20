@@ -73,6 +73,13 @@ export default function OppositionSearcher({
       const data = await response.json();
       setMaterialTitle(data.title || item.title);
       setMaterialFiles(Array.isArray(data.materialFiles) ? data.materialFiles : []);
+      
+      // IMPORTANT: Register the opposition from BOE search result as active
+      // Use the BOE link as the unique ID for this opposition
+      const boeLinkId = item.link;
+      
+      // Auto-select this opposition to make it "active"
+      onSelectOpposition(boeLinkId);
     } catch (error: any) {
       console.error(error);
       setMaterialError(error.message || "No se pudo cargar el material oficial.");
@@ -81,44 +88,47 @@ export default function OppositionSearcher({
     }
   };
 
-  const fetchRssFeed = async (searchQuery: any = "", page: number = 1) => {
+  const fetchRssFeed = async (searchQuery: any = "", page: number = 1, fetchMultiplePages: boolean = false) => {
     setLoadingRss(true);
     setRssError("");
     try {
       const actualQuery = typeof searchQuery === "string" ? searchQuery.trim() : searchTerm.trim();
       
-      // Build query params with filters
-      const params = new URLSearchParams();
-      if (actualQuery) params.append("q", actualQuery);
-      if (selectedScope) params.append("scope", selectedScope);
-      if (selectedCategory) params.append("category", selectedCategory);
-      if (dateFrom) params.append("dateFrom", dateFrom);
-      if (page > 1) params.append("page", page.toString());
+      let allFetchedItems: RSSItem[] = [];
       
-      const url = `/api/boe-rss?${params.toString()}`;
+      // If user wants comprehensive search, fetch multiple pages
+      const maxPages = fetchMultiplePages ? 5 : 1; // Fetch up to 5 pages for comprehensive search
       
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error("No se pudo obtener el feed de BOE.");
+      for (let pageNum = page; pageNum < page + maxPages; pageNum++) {
+        const params = new URLSearchParams();
+        if (actualQuery) params.append("q", actualQuery);
+        if (selectedScope) params.append("scope", selectedScope);
+        if (selectedCategory) params.append("category", selectedCategory);
+        if (dateFrom) params.append("dateFrom", dateFrom);
+        if (pageNum > 1) params.append("page", pageNum.toString());
+        
+        const url = `/api/boe-rss?${params.toString()}`;
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error("No se pudo obtener el feed de BOE.");
+        }
+        const data = await response.json();
+        let fetchedItems: RSSItem[] = [];
+        if (data && Array.isArray(data.items)) {
+          fetchedItems = data.items;
+        }
+        
+        // Add to all items
+        allFetchedItems = [...allFetchedItems, ...fetchedItems];
+        
+        // If this page had fewer items than 50, no point fetching more
+        if (fetchedItems.length < 50) {
+          break;
+        }
       }
-      const data = await response.json();
-      let fetchedItems: RSSItem[] = [];
-      if (data && Array.isArray(data.items)) {
-        fetchedItems = data.items;
-      } else if (data && typeof data.xml === "string") {
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(data.xml, "text/xml");
-        const xmlItems = xmlDoc.querySelectorAll("item");
-        xmlItems.forEach((item) => {
-          const title = item.querySelector("title")?.textContent || "";
-          const link = item.querySelector("link")?.textContent || "";
-          const pubDate = item.querySelector("pubDate")?.textContent || "";
-          const description = item.querySelector("description")?.textContent || "";
-          fetchedItems.push({ title, link, pubDate, description });
-        });
-      }
       
-      setRssItems(fetchedItems);
+      setRssItems(allFetchedItems);
       setCurrentPage(page);
     } catch (err: any) {
       console.error("Error fetching BOE data:", err);
@@ -185,12 +195,21 @@ export default function OppositionSearcher({
             </div>
             <button
               id="btn-refresh-rss"
-              onClick={() => fetchRssFeed(searchTerm)}
+              onClick={() => fetchRssFeed(searchTerm, 1, false)}
               disabled={loadingRss}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 h-10 shrink-0 cursor-pointer disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loadingRss ? "animate-spin" : ""}`} />
               Buscar en Boletines
+            </button>
+            <button
+              onClick={() => fetchRssFeed(searchTerm, 1, true)}
+              disabled={loadingRss}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 h-10 shrink-0 cursor-pointer disabled:opacity-50"
+              title="Busca en múltiples páginas para obtener más resultados"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingRss ? "animate-spin" : ""}`} />
+              Búsqueda Exhaustiva
             </button>
             <button
               onClick={() => setShowFilters(!showFilters)}

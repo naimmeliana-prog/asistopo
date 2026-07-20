@@ -112,6 +112,11 @@ async function fetchBoeRealSearch(query: string, page: number = 1, scope?: strin
       const uniqueDescriptionParts = Array.from(new Set(descriptionParts));
       const fullDescription = uniqueDescriptionParts.join(" | ").trim();
 
+      // FILTER: Only include real opposition convocatorias
+      if (!isRealOpposition(title, fullDescription)) {
+        continue; // Skip non-opposition results
+      }
+
       if (title && link) {
         items.push({
           id: link,
@@ -135,11 +140,47 @@ async function fetchBoeRealSearch(query: string, page: number = 1, scope?: strin
   }
 }
 
-// Helper to match query against title/description
-function matchesQuery(title: string, description: string, query: string): boolean {
-  if (!query.trim()) return true;
-  const lowerQuery = query.toLowerCase();
-  return title.toLowerCase().includes(lowerQuery) || description.toLowerCase().includes(lowerQuery);
+// Helper to filter out non-opposition results (noise)
+function isRealOpposition(title: string, description: string): boolean {
+  const combined = (title + " " + description).toLowerCase();
+  
+  // EXCLUSIONS: Resoluciones que NO son oposiciones
+  const excludePatterns = [
+    /relaci[óo]n\s+(?:definitiva|provisional|de\s+aprobados?|de\s+admitidos?|de\s+suplentes?|de\s+personas)/i,
+    /resoluci[óo]n\s+.*\s+(?:nombra|nombre|designa|anula|rectifica|corrige|modifica|revoca)/i,
+    /tribunal\s+(?:calificador|de\s+oposici[óo]n)/i,
+    /correci[óo]n\s+de\s+(?:erratas?|errores?)/i,
+    /aclaraci[óo]n|modific|ampliaci[óo]n|suspensi[óo]n|anulaci[óo]n/i,
+    /errata|fe\s+de\s+erratas?/i,
+    /unico\s+(?:acto|fase|ejercicio)/i,
+    /resultado(?:s)?\s+(?:de\s+)?(?:la\s+)?(?:prueba|examen|fase)/i,
+    /desestima(?:ci[óo]n)?/i,
+    /inadmisi[óo]n/i,
+    /recurso\s+(?:contencioso|administrativo)/i,
+  ];
+  
+  // If matches any exclusion, it's not a real opposition
+  for (const pattern of excludePatterns) {
+    if (pattern.test(combined)) {
+      return false;
+    }
+  }
+  
+  // INCLUSIONS: Must contain at least one indicator of a real opposition
+  const includePatterns = [
+    /convocatoria\s+(?:de\s+)?oposiciones?/i,
+    /oposiciones?\s+(?:libres?|por\s+orden|de\s+promoci[óo]n)/i,
+    /plazas?\s+(?:de\s+)?oposici[óo]n/i,
+    /base(?:s)?\s+(?:de\s+)?(?:la\s+)?(?:convocatoria|oposici[óo]n)/i,
+    /adjudicaci[óo]n\s+de\s+plazas/i,
+    /proceso\s+selectivo/i,
+    /prueba(?:s)?\s+selectiva(?:s)?/i,
+  ];
+  
+  // Must match at least one inclusion pattern
+  const hasInclusion = includePatterns.some(pattern => pattern.test(combined));
+  
+  return hasInclusion;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -164,8 +205,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let items = await fetchBoeRealSearch(query, page, scope, category, dateFrom);
     
     if (query) {
-      // Apply strict keyword matching
-      items = items.filter(item => matchesQuery(item.title, item.description, query));
+      // Apply strict keyword matching AND opposition filter
+      items = items.filter(item => {
+        const lowerQuery = query.toLowerCase();
+        return (item.title.toLowerCase().includes(lowerQuery) || item.description.toLowerCase().includes(lowerQuery)) &&
+               isRealOpposition(item.title, item.description);
+      });
     }
 
     // Apply scope filter if specified

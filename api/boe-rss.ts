@@ -112,11 +112,6 @@ async function fetchBoeRealSearch(query: string, page: number = 1, scope?: strin
       const uniqueDescriptionParts = Array.from(new Set(descriptionParts));
       const fullDescription = uniqueDescriptionParts.join(" | ").trim();
 
-      // FILTER: Only include real opposition convocatorias
-      if (!isRealOpposition(title, fullDescription)) {
-        continue; // Skip non-opposition results
-      }
-
       if (title && link) {
         items.push({
           id: link,

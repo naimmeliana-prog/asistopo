@@ -310,8 +310,13 @@ app.get("/api/boe-rss", async (req: Request, res: Response) => {
         return false;
       }
       
-      // Exclude errata/corrections
-      if (titleLC.includes("errata") || titleLC.includes("fe de erratas")) {
+      // Exclude errata / corrections
+      if (titleLC.includes("errata") || titleLC.includes("fe de erratas") || descLC.includes("errata") || descLC.includes("fe de erratas")) {
+        return false;
+      }
+      
+      // Exclude other public-administration indirect notices that are not opposition records
+      if (titleLC.includes("becas") || titleLC.includes("ayudas") || titleLC.includes("prestación") || titleLC.includes("prestaciones") || titleLC.includes("planificación") || titleLC.includes("planificacion")) {
         return false;
       }
       

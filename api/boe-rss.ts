@@ -161,24 +161,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     items = items.filter(item => {
       const titleLC = item.title.toLowerCase();
       const descLC = item.description.toLowerCase();
+      const combined = `${titleLC} ${descLC}`;
       
       // STRONG EXCLUSIONS: These are definitely NOT opposition convocatorias
-      if (titleLC.includes("relación definitiva") || 
-          titleLC.includes("relación de admitidos") ||
-          titleLC.includes("relación de aprobados") ||
-          descLC.includes("relación definitiva") ||
-          descLC.includes("relación de admitidos")) {
+      if (combined.includes("relación definitiva") || 
+          combined.includes("relación de admitidos") ||
+          combined.includes("relación de aprobados")) {
         return false; // This is NOT a convocatoria, it's a results list
       }
       
       // Exclude tribunal calificador articles (judge appointment notifications)
-      if ((titleLC + descLC).includes("tribunal calificador") && 
-          !(titleLC + descLC).includes("convocatoria")) {
+      if (combined.includes("tribunal calificador") && !combined.includes("convocatoria")) {
         return false;
       }
       
-      // Exclude errata/corrections
-      if (titleLC.includes("errata") || titleLC.includes("fe de erratas")) {
+      // Exclude errata / corrections
+      if (combined.includes("errata") || combined.includes("fe de erratas")) {
+        return false;
+      }
+      
+      // Exclude other public-administration indirect notices that are not opposition records
+      if (combined.includes("becas") || combined.includes("ayudas") || combined.includes("prestación") || combined.includes("prestaciones") || combined.includes("planificación") || combined.includes("planificacion")) {
         return false;
       }
       

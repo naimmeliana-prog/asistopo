@@ -57,6 +57,55 @@ export default function OppositionSearcher({
       .replace(/[\u0300-\u036f]/g, "");
   };
 
+  const buildCustomOppositionFromItem = (item: RSSItem): OppositionData => {
+    const title = item.title || "Oposición oficial BOE";
+    const normalizedTitle = title.replace(/\s+/g, " ").trim();
+    const titleLower = normalizedTitle.toLowerCase();
+    const shortName = normalizedTitle.length > 60 ? `${normalizedTitle.slice(0, 57).trim()}...` : normalizedTitle;
+
+    const adminType: OppositionData["adminType"] = titleLower.includes("ayuntamiento") || titleLower.includes("municipio") || titleLower.includes("local")
+      ? "Local"
+      : titleLower.includes("comunidad") || titleLower.includes("generalitat") || titleLower.includes("junta")
+      ? "Autonómica"
+      : "Estatal";
+
+    const group = titleLower.includes("a1")
+      ? "A1"
+      : titleLower.includes("a2")
+      ? "A2"
+      : titleLower.includes("c1")
+      ? "C1"
+      : titleLower.includes("c2")
+      ? "C2"
+      : "C2";
+
+    return {
+      id: item.link,
+      name: normalizedTitle,
+      shortName,
+      group,
+      adminType,
+      region: "España",
+      status: "Abierto",
+      generalRequirements: [],
+      tribunalQualities: [],
+      card: {
+        vacancies: 0,
+        scale: "N/A",
+        deadline: "Consulta el BOE oficial",
+        referenceBOE: item.link,
+        officialLink: item.link,
+        place: "N/A",
+        examType: "Convocatoria oficial BOE",
+        minDegree: "N/A",
+        legislativeWarning: "Consulta el BOE oficial para los detalles específicos.",
+      },
+      syllabus: [],
+      officialExams: [],
+      practicalCases: [],
+    };
+  };
+
   const handleFetchOfficialMaterials = async (item: RSSItem) => {
     setSelectedItemForMaterials(item);
     setMaterialFiles([]);
@@ -77,8 +126,8 @@ export default function OppositionSearcher({
       // IMPORTANT: Register the opposition from BOE search result as active
       // Use the BOE link as the unique ID for this opposition
       const boeLinkId = item.link;
-      
-      // Auto-select this opposition to make it "active"
+      const customOpposition = buildCustomOppositionFromItem(item);
+      onAddCustomOpposition(customOpposition);
       onSelectOpposition(boeLinkId);
     } catch (error: any) {
       console.error(error);

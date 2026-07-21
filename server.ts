@@ -289,8 +289,37 @@ app.get("/api/boe-rss", async (req: Request, res: Response) => {
   try {
     // 1. ALWAYS query the live official BOE XML Search API as the primary source first
     let items = await fetchBoeRealSearch(query);
+    
+    // 2. FILTER OUT OBVIOUS NON-OPPOSITION NOISE
+    items = items.filter(item => {
+      const titleLC = item.title.toLowerCase();
+      const descLC = item.description.toLowerCase();
+      
+      // STRONG EXCLUSIONS: These are definitely NOT opposition convocatorias
+      if (titleLC.includes("relación definitiva") || 
+          titleLC.includes("relación de admitidos") ||
+          titleLC.includes("relación de aprobados") ||
+          descLC.includes("relación definitiva") ||
+          descLC.includes("relación de admitidos")) {
+        return false; // This is NOT a convocatoria, it's a results list
+      }
+      
+      // Exclude tribunal calificador articles (judge appointment notifications)
+      if ((titleLC + descLC).includes("tribunal calificador") && 
+          !(titleLC + descLC).includes("convocatoria")) {
+        return false;
+      }
+      
+      // Exclude errata/corrections
+      if (titleLC.includes("errata") || titleLC.includes("fe de erratas")) {
+        return false;
+      }
+      
+      return true;
+    });
+    
     if (query) {
-      // Apply strict keyword matching to prevent BOE's general fallback list from polluting custom queries (like "ingeniero técnico")
+      // 3. Apply keyword matching for user's search query
       items = items.filter(item => matchesQuery(item.title, item.description, query));
     }
 

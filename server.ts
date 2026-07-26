@@ -16,7 +16,7 @@ app.use(express.json({ limit: "10mb" }));
 let aiInstance: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI {
   if (!aiInstance) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI__API_KEY;
     if (!apiKey) {
       throw new Error("GEMINI_API_KEY environment variable is missing.");
     }
@@ -67,7 +67,7 @@ async function generateAISchema(params: {
 }): Promise<string> {
   const { prompt, systemInstruction, responseMimeType = "application/json", useSearch = false } = params;
 
-  const hasGemini = !!process.env.GEMINI_API_KEY;
+  const hasGemini = !!(process.env.GEMINI_API_KEY || process.env.GEMINI__API_KEY);
   const hasOpenRouter = !!process.env.OPENROUTER_API_KEY;
 
   if (!hasGemini && !hasOpenRouter) {

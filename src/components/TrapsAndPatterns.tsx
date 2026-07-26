@@ -96,8 +96,9 @@ const OFFLINE_TRAP_QUESTIONS: TrapQuestion[] = [
 ];
 
 export default function TrapsAndPatterns({ opposition, isSimulatedOffline }: TrapsAndPatternsProps) {
-  // Multi-year selection states
+  // Multi-year and Specialty selection states
   const [selectedYears, setSelectedYears] = useState<number[]>([2023, 2024]);
+  const [selectedSpecialty, setSelectedSpecialty] = useState<string>("all");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [analysisData, setAnalysisData] = useState<IAData | null>(null);
@@ -130,6 +131,7 @@ export default function TrapsAndPatterns({ opposition, isSimulatedOffline }: Tra
         body: JSON.stringify({
           opposition: opposition.name,
           years: selectedYears,
+          specialty: selectedSpecialty === "all" ? undefined : selectedSpecialty
         }),
       });
 
@@ -141,7 +143,7 @@ export default function TrapsAndPatterns({ opposition, isSimulatedOffline }: Tra
       setAnalysisData(data);
     } catch (err: any) {
       console.warn("Using high-fidelity client-side pattern analysis:", err);
-      const data = generateClientPatterns(opposition.name, selectedYears);
+      const data = generateClientPatterns(opposition.name, selectedYears, selectedSpecialty);
       setAnalysisData(data);
     } finally {
       setIsAnalyzing(false);
@@ -156,20 +158,25 @@ export default function TrapsAndPatterns({ opposition, isSimulatedOffline }: Tra
     setShowAnswerResults((prev) => ({ ...prev, [qIdx]: true }));
   };
 
+  // Dynamic client fallback data based on active opposition & specialty
+  const defaultClientData = useMemo(() => {
+    return generateClientPatterns(opposition.name, selectedYears, selectedSpecialty);
+  }, [opposition.name, selectedYears, selectedSpecialty]);
+
   // Compile active traps based on multi-year selected checkboxes
   const activeTraps = useMemo(() => {
-    if (analysisData) return analysisData.typicalTraps;
-    
-    // Fallback: merge offline traps from all selected years
-    return selectedYears
-      .filter((y) => OFFLINE_TRAPS_DB[y])
-      .flatMap((y) => OFFLINE_TRAPS_DB[y]);
-  }, [analysisData, selectedYears]);
+    if (analysisData && Array.isArray(analysisData.typicalTraps) && analysisData.typicalTraps.length > 0) {
+      return analysisData.typicalTraps;
+    }
+    return defaultClientData.typicalTraps;
+  }, [analysisData, defaultClientData]);
 
   const activeQuestions = useMemo(() => {
-    if (analysisData) return analysisData.mockTrapQuestions;
-    return OFFLINE_TRAP_QUESTIONS;
-  }, [analysisData]);
+    if (analysisData && Array.isArray(analysisData.mockTrapQuestions) && analysisData.mockTrapQuestions.length > 0) {
+      return analysisData.mockTrapQuestions;
+    }
+    return defaultClientData.mockTrapQuestions;
+  }, [analysisData, defaultClientData]);
 
   return (
     <div id="traps-and-patterns" className="space-y-6">
@@ -192,6 +199,34 @@ export default function TrapsAndPatterns({ opposition, isSimulatedOffline }: Tra
             <h3 className="font-extrabold text-xs text-slate-700 uppercase tracking-wider block">
               Configuración de Análisis
             </h3>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-gray-700">
+                Filtrar por Especialidad o Bloque del Temario
+              </label>
+              <select
+                id="select-trap-specialty"
+                value={selectedSpecialty}
+                onChange={(e) => setSelectedSpecialty(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="all">Todas las especialidades (Visión General)</option>
+                {opposition.syllabus?.map((block) => (
+                  <option key={block.id} value={block.title}>
+                    {block.title}
+                  </option>
+                ))}
+                <option value="Sanidad">Especialidad Sanidad / Salud</option>
+                <option value="Policía">Especialidad Policía / Seguridad</option>
+                <option value="Bomberos">Especialidad Bomberos / Emergencias</option>
+                <option value="Justicia">Especialidad Justicia / Procesal</option>
+                <option value="Hacienda">Especialidad Hacienda / Tributaria</option>
+                <option value="Correos">Especialidad Correos y Telégrafos</option>
+                <option value="Educación">Especialidad Educación / Docente</option>
+                <option value="Informática">Especialidad Informática / TIC</option>
+                <option value="Conducción">Especialidad Conducción y Transporte</option>
+              </select>
+            </div>
 
             <div className="space-y-2">
               <label className="block text-xs font-semibold text-gray-700">

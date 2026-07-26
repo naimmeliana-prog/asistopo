@@ -146,15 +146,11 @@ export default function MnemonicsStudy({ opposition, isSimulatedOffline }: Mnemo
     }
   };
 
-  // Compile the current active mnemonic, prioritizing dynamically generated ones, falling back to OFFLINE_MNEMONICS_DB, then client fallback
+  // Compile the current active mnemonic, prioritizing API result, then dynamic client generator adapted to opposition topic
   const activeMnemonic = useMemo<MnemonicResult | null>(() => {
     if (result) return result;
-    if (OFFLINE_MNEMONICS_DB[customConcept]) {
-      return OFFLINE_MNEMONICS_DB[customConcept];
-    }
-    // Generate beautiful on-the-fly client-side mnemonic adapted to custom concept
     return generateClientMnemonic(customConcept, opposition.name);
-  }, [result, customConcept, opposition]);
+  }, [result, customConcept, opposition.name]);
 
   return (
     <div id="mnemonics-study" className="space-y-6">

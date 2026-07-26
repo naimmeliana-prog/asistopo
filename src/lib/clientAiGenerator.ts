@@ -1,15 +1,15 @@
 import { OppositionData, SyllabusBlock, OfficialExam, PracticalCase } from "../types";
 
 // Dynamic keywords analyzer
-function analyzeKeywords(title: string) {
+export function analyzeKeywords(title: string) {
   const t = title.toLowerCase();
   
   let group = "C1";
-  if (t.includes("auxiliar") || t.includes("reparto") || t.includes("celador") || t.includes("escala basica")) {
+  if (t.includes("auxiliar") || t.includes("reparto") || t.includes("celador") || t.includes("escala basica") || t.includes("tcae") || t.includes("conserje")) {
     group = "C2";
-  } else if (t.includes("gestion") || t.includes("tecnico") || t.includes("subinspector") || t.includes("ejecutiva")) {
+  } else if (t.includes("gestion") || t.includes("tecnico") || t.includes("subinspector") || t.includes("ejecutiva") || t.includes("enfermero") || t.includes("fisioterapeuta")) {
     group = "A2";
-  } else if (t.includes("letrado") || t.includes("superior") || t.includes("ingeniero") || t.includes("facultativo")) {
+  } else if (t.includes("letrado") || t.includes("superior") || t.includes("ingeniero") || t.includes("facultativo") || t.includes("medico") || t.includes("juez") || t.includes("fiscal")) {
     group = "A1";
   }
 
@@ -22,7 +22,7 @@ function analyzeKeywords(title: string) {
   } else if (t.includes("madrid") || t.includes("bocm")) {
     adminType = "Autonómica";
     region = "Comunidad de Madrid";
-  } else if (t.includes("andalucia") || t.includes("junta")) {
+  } else if (t.includes("andalucia") || t.includes("junta") || t.includes("boja")) {
     adminType = "Autonómica";
     region = "Andalucía";
   } else if (t.includes("aragon") || t.includes("zaragoza")) {
@@ -31,22 +31,34 @@ function analyzeKeywords(title: string) {
   } else if (t.includes("galicia") || t.includes("xunta")) {
     adminType = "Autonómica";
     region = "Galicia";
-  } else if (t.includes("ayuntamiento") || t.includes("diputacion") || t.includes("cabildo") || t.includes("municipio")) {
+  } else if (t.includes("catalunya") || t.includes("gencat")) {
+    adminType = "Autonómica";
+    region = "Cataluña";
+  } else if (t.includes("ayuntamiento") || t.includes("diputacion") || t.includes("cabildo") || t.includes("municipio") || t.includes("consell")) {
     adminType = "Local";
     region = "Local";
   }
 
-  let sector = "Administrativo";
-  if (t.includes("bombero") || t.includes("fuego") || t.includes("incendio")) {
+  let sector: "Sanidad" | "Policía" | "Bomberos" | "Justicia" | "Correos" | "Hacienda" | "Educación" | "Informática" | "Conducción" | "Administrativo" = "Administrativo";
+  
+  if (t.includes("bombero") || t.includes("fuego") || t.includes("incendio") || t.includes("emergencia")) {
     sector = "Bomberos";
-  } else if (t.includes("policia") || t.includes("seguridad") || t.includes("civil") || t.includes("guardia")) {
+  } else if (t.includes("policia") || t.includes("seguridad") || t.includes("guardia civil") || t.includes("mossos") || t.includes("ertzaintza")) {
     sector = "Policía";
-  } else if (t.includes("justicia") || t.includes("tramitacion") || t.includes("auxilio") || t.includes("procesal")) {
+  } else if (t.includes("justicia") || t.includes("tramitacion") || t.includes("auxilio") || t.includes("procesal") || t.includes("judicial")) {
     sector = "Justicia";
-  } else if (t.includes("correos") || t.includes("postal") || t.includes("reparto")) {
+  } else if (t.includes("correos") || t.includes("postal") || t.includes("reparto") || t.includes("envio")) {
     sector = "Correos";
-  } else if (t.includes("celador") || t.includes("salud") || t.includes("enfermero") || t.includes("sanitario")) {
+  } else if (t.includes("celador") || t.includes("salud") || t.includes("enfermer") || t.includes("sanitar") || t.includes("medico") || t.includes("tcae") || t.includes("fisioterapeuta") || t.includes("hospital")) {
     sector = "Sanidad";
+  } else if (t.includes("hacienda") || t.includes("tribut") || t.includes("agencia tributaria") || t.includes("fiscal")) {
+    sector = "Hacienda";
+  } else if (t.includes("profesor") || t.includes("maestro") || t.includes("educacion") || t.includes("infantil") || t.includes("secundaria") || t.includes("docente")) {
+    sector = "Educación";
+  } else if (t.includes("informatic") || t.includes("sistemas") || t.includes("redes") || t.includes("telecomunicaci") || t.includes("software") || t.includes("programador")) {
+    sector = "Informática";
+  } else if (t.includes("conductor") || t.includes("maquinista") || t.includes("trafico") || t.includes("vehiculo") || t.includes("transporte")) {
+    sector = "Conducción";
   }
 
   return { group, adminType, region, sector };
@@ -55,7 +67,7 @@ function analyzeKeywords(title: string) {
 export function generateClientOpposition(title: string, description: string = ""): OppositionData {
   const { group, adminType, region, sector } = analyzeKeywords(title);
   
-  const shortName = title.split(" - ")[0].slice(0, 30);
+  const shortName = title.split(" - ")[0].slice(0, 35);
   const id = title.toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -63,218 +75,231 @@ export function generateClientOpposition(title: string, description: string = ""
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 
-  // Generate customized syllabus based on the sector and region
   const syllabus: SyllabusBlock[] = [];
   
-  // Block 1: Derecho Constitucional y Organización del Estado
+  // Block 1: Legislative Basis
   const block1Topics = [
     {
       id: "t1",
-      title: "La Constitución Española de 1978: Estructura, valores superiores y derechos fundamentales",
-      articles: ["Art. 1 CE", "Art. 2 CE", "Art. 9 CE", "Art. 14 CE", "Art. 15 a 29 CE"],
-      content: "La Constitución Española como norma suprema. Valores superiores: libertad, justicia, igualdad, pluralismo político. El principio de legalidad y la jerarquía normativa. Análisis pormenorizado de los derechos fundamentales y libertades públicas."
+      title: "La Constitución Española de 1978: Valores superiores, derechos fundamentales y libertades públicas.",
+      articles: ["Constitución Española (Artículos 1, 9.3, 14, 15 a 29)"],
+      content: "Análisis sistemático de los principios constitucionales. Jerarquía normativa, principio de legalidad y tutela judicial efectiva."
     },
     {
       id: "t2",
-      title: `Organización de la Administración Pública de destino (${adminType}) y su marco estatutario`,
-      articles: adminType === "Estatal" ? ["Art. 97 a 107 CE", "Ley 40/2015"] : ["Estatuto de Autonomía", "Ley del Gobierno Regional"],
-      content: "Estudio de las instituciones de gobierno. El consejo de ministros o consejo de gobierno autonómico. Las delegaciones de competencias, régimen de funcionamiento y órganos colegiados de control técnico."
+      title: `Estructura y competencias de la Administración de destino (${adminType} - ${region}).`,
+      articles: adminType === "Estatal" ? ["Ley 40/2015 de Régimen Jurídico del Sector Público"] : ["Estatuto de Autonomía de " + region],
+      content: "Organización administrativa, competencias delegadas y relación jerárquica de los órganos directivos."
     }
   ];
   
-  // Block 2: Derecho Administrativo y Procedimiento
+  // Block 2: Procedure & Personnel
   const block2Topics = [
     {
       id: "t3",
-      title: "El acto administrativo: Concepto, clases, validez, nulidad y anulabilidad",
-      articles: ["Art. 34 a 48 Ley 39/2015", "Art. 47 Ley 39/2015", "Art. 48 Ley 39/2015"],
-      content: "Concepto de acto administrativo. Requisitos de validez de las resoluciones. Eficiencia inmediata y demorada. El artículo 47 regula las causas tasadas de nulidad de pleno derecho, mientras que el 48 regula los vicios de anulabilidad."
+      title: "El procedimiento administrativo común: Fases, términos, notificaciones y plazos.",
+      articles: ["Ley 39/2015 (Artículos 21, 24, 30, 40 a 46)"],
+      content: "Requisitos de validez del acto administrativo. Cómputo de días hábiles e inhábiles. Notificación electrónica y silencio administrativo."
     },
     {
       id: "t4",
-      title: "El procedimiento administrativo común: Fases de iniciación, ordenación, instrucción y terminación",
-      articles: ["Art. 54 a 95 Ley 39/2015", "Art. 21 Ley 39/2015", "Art. 24 Ley 39/2015"],
-      content: "El derecho a un procedimiento con plazos ciertos. Iniciación de oficio o a instancia de parte. Reglas de cómputo de plazos por días hábiles, meses o años. Silencio administrativo positivo y negativo, y su acreditación formal."
+      title: "El Estatuto Básico del Empleado Público (TREBEP): Derechos, deberes y régimen disciplinario.",
+      articles: ["TREBEP (Artículos 8 a 15, 52 a 54, 93 a 98)"],
+      content: "Clases de personal (funcionario, laboral, eventual). Código de conducta, incompatibilidades y tipos de faltas y sanciones."
     }
   ];
 
-  // Block 3: Sector Specific Block
+  // Block 3: Sector Specific
   const block3Topics: any[] = [];
-  if (sector === "Justicia") {
+  if (sector === "Sanidad") {
     block3Topics.push(
       {
         id: "t5",
-        title: "El personal de la Administración de Justicia: Cuerpos Generales y Letrados de la AJ",
-        articles: ["Art. 470 a 485 LOPJ", "Art. 452 LOPJ"],
-        content: "Organización de los Cuerpos Generales de funcionarios judiciales. Derechos, deberes y acceso a los puestos de Auxilio Judicial, Tramitación y Gestión Procesal."
+        title: "Ley 41/2002 de Autonomía del Paciente: Consentimiento informado y la historia clínica",
+        articles: ["Ley 41/2002 (Artículos 2, 4 a 10, 14 a 18)"],
+        content: "Derecho a la información asistencial, derecho a la intimidad y secreto profesional. Requisitos formales del consentimiento informado por escrito vs verbal."
       },
       {
         id: "t6",
-        title: "Los actos procesales: Resoluciones del Juez y resoluciones del Letrado de la AJ",
-        articles: ["Art. 206 LEC", "Art. 452 LEC", "Art. 456 LOPJ"],
-        content: "Diferenciación estricta entre providencias, autos y sentencias (dictadas por Jueces) y actas, diligencias y decretos (competencia exclusiva de los Letrados de la AJ)."
+        title: "Ley 55/2003 del Estatuto Marco del Personal Estatutario de los Servicios de Salud",
+        articles: ["Ley 55/2003 (Artículos 17, 19, 46 a 62)"],
+        content: "Clasificación del personal estatutario, jornada de trabajo, descansos, permisos, movilidad funcional y régimen disciplinario sanitario."
+      }
+    );
+  } else if (sector === "Policía") {
+    block3Topics.push(
+      {
+        id: "t5",
+        title: "Ley Orgánica 2/1986 de Fuerzas y Cuerpos de Seguridad",
+        articles: ["LO 2/1986 (Artículos 5, 9, 11, 12, 51 a 54)"],
+        content: "Principios básicos de actuación: adecuación entre fines y medios, proporcionalidad, neutralidad y confidencialidad profesional."
+      },
+      {
+        id: "t6",
+        title: "Ley Orgánica 4/2015 de Protección de la Seguridad Ciudadana",
+        articles: ["LO 4/2015 (Artículos 16 a 21, 36 a 39)"],
+        content: "Diligencias de identificación, registros corporales externos, medidas de seguridad en eventos públicos e infracciones administrativas."
+      }
+    );
+  } else if (sector === "Bomberos") {
+    block3Topics.push(
+      {
+        id: "t5",
+        title: "Ley 17/2015 del Sistema Nacional de Protección Civil y Planes de Emergencia",
+        articles: ["Ley 17/2015 (Artículos 7, 14, 19, 24)"],
+        content: "Redes de alerta nacional, coordinación operativa en emergencias catastróficas, planes territoriales y especiales de intervención."
+      },
+      {
+        id: "t6",
+        title: "Teoría del fuego, sustancias peligrosas y técnicas de extinción y rescate",
+        articles: ["Normativa CTE DB-SI", "Reglamento de Instalaciones de Protección contra Incendios"],
+        content: "Triángulo y tetraedro del fuego, clases de fuego (A, B, C, D, F), agentes extintores, Equipos de Protección Individual (EPI) y ventilación táctica."
+      }
+    );
+  } else if (sector === "Justicia") {
+    block3Topics.push(
+      {
+        id: "t5",
+        title: "Ley Orgánica del Poder Judicial: Organización de Juzgados y Tribunales",
+        articles: ["LOPJ (Artículos 435 a 533)"],
+        content: "Atribuciones de los Cuerpos Generales (Gestión, Tramitación y Auxilio Judicial) y funciones del Letrado de la Administración de Justicia."
+      },
+      {
+        id: "t6",
+        title: "Los actos procesales y resoluciones judiciales",
+        articles: ["LEC (Artículos 206 a 215)", "LOPJ (Artículos 244 a 248)"],
+        content: "Providencias, Autos y Sentencias dictadas por el Juez vs. Diligencias y Decretos dictados por el Letrado de la AJ. Plazos de notificación y subsanación."
       }
     );
   } else if (sector === "Correos") {
     block3Topics.push(
       {
         id: "t5",
-        title: "El Servicio Postal Universal: Ámbito, condiciones de prestación y régimen de reserva",
-        articles: ["Ley 43/2010 del Servicio Postal Universal", "Directiva 97/67/CE"],
-        content: "Régimen del servicio postal universal encomendado a la Sociedad Estatal Correos y Telégrafos. Derechos de los usuarios postales, plazos de entrega ordinarios y certificados de correos."
+        title: "Ley 43/2010 del Servicio Postal Universal y de los Usuarios Postales",
+        articles: ["Ley 43/2010 (Artículos 15 a 25)"],
+        content: "Prestación del Servicio Postal Universal, garantías de entrega, reservas operativas, secretos de correspondencia y plazos de reclamación."
       },
       {
         id: "t6",
-        title: "Procesos de admisión, clasificación, transporte y distribución postal",
-        articles: ["Reglamento de Correos 2024", "Normativa de Envíos Certificados"],
-        content: "Admisión masiva y de red. Criterios técnicos de clasificación automatizada de correspondencia. Distribución final a domicilio y plazos legales para avisos de entrega certificada."
+        title: "Líneas de productos de Correos, admisión, clasificación y entrega certificada",
+        articles: ["Reglamento Postal y Protocolos de Entrega Con AVISO"],
+        content: "Gestión de paquetería digital, envíos burofax y telegramas, intentos de entrega a domicilio y depósitos en lista de oficina."
       }
     );
-  } else if (sector === "Policía" || sector === "Bomberos") {
+  } else if (sector === "Hacienda") {
     block3Topics.push(
       {
         id: "t5",
-        title: "Ley Orgánica de Fuerzas y Cuerpos de Seguridad: Principios básicos de actuación",
-        articles: ["LO 2/1986", "Constitución Española Art. 104"],
-        content: "Principios de jerarquía, proporcionalidad, oportunidad, congruencia y neutralidad política de los agentes del Estado en el mantenimiento del orden público."
+        title: "Ley 58/2003 General Tributaria: Principios, tributos y liquidadoras",
+        articles: ["LGT (Artículos 2, 26, 35, 59 a 70, 101 a 112)"],
+        content: "Impuestos, tasas y contribuciones especiales. Devengo, prescripción de la deuda tributaria (4 años) y procedimiento de gestión e inspección."
       },
       {
         id: "t6",
-        title: "Prevención, protección ciudadana y gestión de emergencias",
-        articles: ["Ley 17/2015 del Sistema Nacional de Protección Civil"],
-        content: "Estructura de mando operativo en situaciones de siniestro o riesgo catastrófico. Coordinación interadministrativa del 112 y planes territoriales de emergencia."
+        title: "El procedimiento de recaudación tributaria en periodo voluntario y ejecutivo",
+        articles: ["LGT (Artículos 160 a 177)", "Reglamento General de Recaudación"],
+        content: "Providencia de apremio, recargos del periodo ejecutivo (5%, 10%, 20%), embargo de bienes y derechos."
+      }
+    );
+  } else if (sector === "Educación") {
+    block3Topics.push(
+      {
+        id: "t5",
+        title: "Ley Orgánica de Educación (LOE/LOMLOE): Principios del sistema educativo",
+        articles: ["LOE/LOMLOE (Artículos 1 a 6, 121 a 129)"],
+        content: "Atención a la diversidad, inclusión educativa, proyectos educativos de centro y competencias clave del currículo."
+      },
+      {
+        id: "t6",
+        title: "Órganos de gobierno y coordinación docente en los centros públicos",
+        articles: ["LOE (Artículos 126 a 139)"],
+        content: "Funciones del Director, Equipo Directivo, Consejo Escolar y Claustro de Profesores. Programaciones didácticas y evaluación."
+      }
+    );
+  } else if (sector === "Informática") {
+    block3Topics.push(
+      {
+        id: "t5",
+        title: "El Esquema Nacional de Seguridad (ENS) y Esquema Nacional de Interoperabilidad (ENI)",
+        articles: ["Real Decreto 311/2022 (ENS)", "Real Decreto 4/2010 (ENI)"],
+        content: "Principios básicos de seguridad, dimensiones (autenticidad, confidencialidad, integridad, disponibilidad, trazabilidad) y niveles de seguridad."
+      },
+      {
+        id: "t6",
+        title: "Protección de datos personales en las Administraciones Públicas (RGPD y LOPDGDD)",
+        articles: ["RGPD UE 2016/679", "Ley Orgánica 3/2018 (Artículos 5, 6, 12 a 18, 32 a 37)"],
+        content: "Principios del tratamiento, delegado de protección de datos (DPD), evaluaciones de impacto (EIPD) y derechos ARSOPOL."
+      }
+    );
+  } else if (sector === "Conducción") {
+    block3Topics.push(
+      {
+        id: "t5",
+        title: "Ley sobre Tráfico, Circulación de Vehículos a Motor y Seguridad Vial",
+        articles: ["Real Decreto Legislativo 6/2015", "Reglamento General de Circulación"],
+        content: "Permisos de conducción profesionales, tasa de alcohol en sangre para conductores profesionales (0,15 mg/l en aire expirado), tiempos de conducción y descanso (tacógrafo)."
+      },
+      {
+        id: "t6",
+        title: "Mantenimiento preventivo, inspección técnica y seguridad del transporte público",
+        articles: ["Reglamento General de Vehículos", "Normativa ITV"],
+        content: "Comprobaciones mecánicas previas a la marcha, sistemas de frenado, prevención de riesgos laborales en la conducción."
       }
     );
   } else {
-    // General Admin / Sanidad / etc
     block3Topics.push(
       {
         id: "t5",
-        title: "El Estatuto Básico del Empleado Público: Clases de personal y derechos fundamentales",
-        articles: ["Art. 8 a 13 TREBEP", "Art. 14 a 15 TREBEP"],
-        content: "Régimen jurídico del personal funcionario de carrera, interino, laboral y eventual. Derechos retributivos, carrera profesional y principios de mérito y capacidad en el acceso."
+        title: "Transparencia, acceso a la información pública y buen gobierno",
+        articles: ["Ley 19/2013 (Artículos 12 a 24)"],
+        content: "Derecho de acceso a la información, límites al acceso, Consejo de Transparencia y Buen Gobierno y resoluciones estimatorias."
       },
       {
         id: "t6",
-        title: "Régimen disciplinario y pérdida de la condición de funcionario",
-        articles: ["Art. 93 a 98 TREBEP", "Ley de Incompatibilidades 53/1984"],
-        content: "Tipificación de faltas disciplinarias muy graves, graves y leves. Sanciones aplicables, procedimiento sancionador preferente y causas tasadas de jubilación o renuncia."
+        title: "Políticas de igualdad de género y prevención de riesgos laborales en el puesto",
+        articles: ["Ley Orgánica 3/2007", "Ley 31/1995 de Prevención de Riesgos Laborales"],
+        content: "Principios de igualdad de trato, planes de igualdad en la función pública, derechos y deberes preventivos de los empleados públicos."
       }
     );
   }
 
   syllabus.push({
     id: "b1",
-    title: "Bloque I: Derecho Constitucional y Organización Administrativa",
+    title: "Bloque I: Marco Constitucional y Organización del Estado",
     weight: 25,
     topics: block1Topics
   });
   syllabus.push({
     id: "b2",
     title: "Bloque II: Procedimiento Administrativo y Función Pública",
-    weight: 45,
+    weight: 40,
     topics: block2Topics
   });
   syllabus.push({
     id: "b3",
-    title: `Bloque III: Temas Específicos de ${sector}`,
-    weight: 30,
+    title: `Bloque III: Materias Específicas del Puesto (${sector})`,
+    weight: 35,
     topics: block3Topics
   });
 
-  // Generate realistic official exams for testing
+  // Tailored official exams
   const officialExams: OfficialExam[] = [
     {
       year: 2024,
-      location: "Sede Central de Exámenes",
+      location: "Sede de Exámenes Oficiales",
       questionsCount: 3,
-      questions: [
-        {
-          question: `Según la Constitución Española de 1978, ¿cuál de las siguientes opciones define la forma política del Estado español?`,
-          options: [
-            "La República representativa y parlamentaria",
-            "La Monarquía parlamentaria",
-            "La Monarquía federal constitucional",
-            "La Democracia directa de asambleas"
-          ],
-          correctIndex: 1,
-          justification: "El artículo 1.3 de la Constitución Española de 1978 dispone literalmente que 'La forma política del Estado español es la Monarquía parlamentaria'."
-        },
-        {
-          question: `Conforme al artículo 40 de la Ley 39/2015, ¿cuál es el plazo de días hábiles obligatorio dentro del cual el órgano debe cursar la notificación del acto a los interesados?`,
-          options: [
-            "Dentro de los 5 días hábiles siguientes",
-            "Dentro de los 10 días hábiles siguientes a la fecha en que el acto haya sido dictado",
-            "Dentro de los 15 días naturales posteriores",
-            "De forma inmediata en el mismo día del dictamen"
-          ],
-          correctIndex: 1,
-          justification: "El artículo 40.2 de la Ley 39/2015 estipula que toda notificación deberá ser cursada dentro del plazo de diez días hábiles a partir de la fecha en que el acto haya sido dictado."
-        },
-        {
-          question: `De acuerdo con el Estatuto del Empleado Público, ¿cuál de los siguientes es un ejemplo de personal eventual?`,
-          options: [
-            "El funcionario nombrado para suplir una baja temporal de larga duración",
-            "El personal contratado laboral fijo por concurso-oposición",
-            "El que, en virtud de nombramiento y con carácter no permanente, realiza funciones expresamente calificadas como de confianza o asesoramiento especial",
-            "Aquel que realiza trabajos auxiliares de secretaría de forma permanente"
-          ],
-          correctIndex: 2,
-          justification: "El artículo 12 del TREBEP define al personal eventual como aquel que, en virtud de nombramiento y con carácter no permanente, realiza únicamente funciones de confianza o asesoramiento especial, siendo retribuido con cargo a créditos específicos."
-        }
-      ]
+      questions: generateClientTest(title, [], 3, "Medio").questions
     },
     {
       year: 2023,
-      location: "Recinto Ferial de Oposiciones",
-      questionsCount: 2,
-      questions: [
-        {
-          question: `¿Cuál de las siguientes causas se considera un vicio que produce la nulidad de pleno derecho del acto administrativo?`,
-          options: [
-            "Cualquier infracción del ordenamiento jurídico, incluso la desviación de poder",
-            "Los dictados por órganos manifiestamente incompetentes por razón de la materia o del territorio",
-            "El retraso formal en la notificación del acto al interesado",
-            "La falta de firma digital por un funcionario del subgrupo C2"
-          ],
-          correctIndex: 1,
-          justification: "Según el artículo 47.1.b de la Ley 39/2015, son nulos de pleno derecho los actos dictados por órganos manifiestamente incompetentes por razón de la materia o del territorio."
-        },
-        {
-          question: `¿Qué efecto general tiene el transcurso del plazo máximo legal sin que la administración dicte resolución expresa en procedimientos iniciados a solicitud del interesado?`,
-          options: [
-            "Siempre se considera desestimado por silencio negativo",
-            "Por regla general, el silencio administrativo tiene efecto estimatorio (positivo), salvo las excepciones previstas por ley o derecho comunitario",
-            "Se archiva el expediente de forma definitiva sin posibilidad de recurso",
-            "Se impone una multa automática al funcionario instructor"
-          ],
-          correctIndex: 1,
-          justification: "El artículo 24.1 de la Ley 39/2015 consagra el principio del silencio administrativo estimatorio como regla general para solicitudes de interesados, con las excepciones tasadas fijadas por norma con rango de ley."
-        }
-      ]
+      location: "Campus Universitario / Recinto Ferial",
+      questionsCount: 3,
+      questions: generateClientTest(title, [], 3, "Medio").questions
     }
   ];
 
-  // Generate realistic case studies
   const practicalCases: PracticalCase[] = [
-    {
-      id: "pc-1",
-      title: `Supuesto Práctico Oficial de ${shortName}: Silencio y Acto Administrativo`,
-      year: 2024,
-      situation: `Un ciudadano presenta una solicitud formal de licencia o autorización de actividad económica ante la delegación administrativa competente el 15 de marzo de 2026. Transcurren 3 meses completos sin recibir notificación alguna. El interesado considera que, aplicando la regla general de silencio administrativo, cuenta con la autorización y abre el negocio. Sin embargo, el 5 de julio de 2026, la delegación notifica una resolución expresa de inadmisión por falta de documentación obligatoria. El interesado interpone recurso administrativo alegando la firmeza de la estimación presunta por silencio.`,
-      questions: [
-        {
-          question: "¿Se ha producido silencio administrativo de efectos estimatorios en este supuesto?",
-          legalBase: "Artículos 21 y 24 de la Ley 39/2015, del Procedimiento Administrativo Común.",
-          solution: "No se ha producido un silencio estimatorio que otorgue válidamente la licencia si esta requería la transferencia de facultades de dominio público o contravenía leyes estatales vigentes. Además, si la documentación estaba incompleta, el plazo pudo haber sido suspendido legalmente para la subsanación. No obstante, si no se suspendió formalmente, la resolución expresa tardía posterior al vencimiento del plazo solo puede ser confirmatoria de la estimación si esta procedía, o desestimatoria únicamente en los casos tasados por ley."
-        },
-        {
-          question: "¿Es válida la notificación recibida el 5 de julio siendo dictada extemporáneamente por la delegación?",
-          legalBase: "Artículo 21.1 y 24.3 de la Ley 39/2015.",
-          solution: "La Administración está obligada a dictar resolución expresa en todos los procedimientos, sin que la extemporaneidad exima de dicha obligación. Sin embargo, el sentido de esta resolución tardía está limitado: en los casos de silencio positivo previo, la resolución expresa posterior solo puede ser de carácter confirmatorio del sentido estimatorio del silencio."
-        }
-      ]
-    }
+    generateClientCaseStudy(title)
   ];
 
   return {
@@ -287,24 +312,24 @@ export function generateClientOpposition(title: string, description: string = ""
     status: "Abierto",
     generalRequirements: [
       "Tener nacionalidad española o de los estados miembros de la Unión Europea.",
-      `Poseer la titulación exigida de Grado, Bachiller o ESO aplicable al subgrupo de plazas ${group}.`,
-      "No haber sido separado del servicio de las Administraciones Públicas mediante expediente disciplinario."
+      `Poseer la titulación oficial exigida de subgrupo ${group} (Grado, Diplomatura, Bachiller, ESO).`,
+      "No haber sido separado mediante expediente disciplinario del servicio de cualquiera de las Administraciones Públicas."
     ],
     tribunalQualities: [
-      "Sometimiento riguroso al imperio de la ley en el diseño de los enunciados de examen.",
-      "Valoración exhaustiva de la precisión léxica y de la cita literal de los artículos del código civil y leyes de cabecera.",
-      "Uso habitual de plazos cruzados (días hábiles vs. naturales, meses naturales vs. procesales) para descartar opositores con vacíos memorísticos."
+      "Rigurosidad en el control de plazos procesales y administrativos exactos.",
+      `Valoración de la terminología técnica específica propia del sector de ${sector}.`,
+      "Uso de preguntas trampa alternando verbos imperativos y facultativos."
     ],
     card: {
-      vacancies: description.includes("plazas") ? parseInt(description.match(/(\d+)\s+plazas/)?.[1] || "45") : 45,
-      scale: `Cuerpo de la Administración de ${region}`,
-      deadline: "20 días hábiles desde el día siguiente a su publicación oficial",
+      vacancies: description.includes("plazas") ? parseInt(description.match(/(\d+)\s+plazas/)?.[1] || "30") : 30,
+      scale: `Cuerpo o Escala de ${shortName}`,
+      deadline: "20 días hábiles contados a partir del día siguiente a la publicación oficial",
       referenceBOE: "BOE-A-2026-" + Math.floor(1000 + Math.random() * 9000),
-      officialLink: "https://www.boe.es",
+      officialLink: "https://www.boe.es/diario_boe/oposiciones.php",
       place: region,
-      examType: "Oposición Libre con Examen Tipo Test de Respuestas Múltiples",
-      minDegree: group === "A1" ? "Grado Universitario / Licenciatura" : group === "A2" ? "Grado / Diplomatura" : group === "C1" ? "Bachillerato" : "Educación Secundaria Obligatoria",
-      legislativeWarning: "Atención: Este temario incorpora plenamente la jurisprudencia y reformas legislativas de las leyes 39/2015 y 40/2015 vigentes."
+      examType: "Oposición Libre o Concurso-Oposición",
+      minDegree: group === "A1" ? "Grado Universitario / Licenciatura" : group === "A2" ? "Grado / Diplomatura" : group === "C1" ? "Bachillerato o Técnico" : "Educación Secundaria Obligatoria",
+      legislativeWarning: `Atención: Contenido actualizado con la legislación específica de ${sector} y leyes generales 39/2015, 40/2015 y TREBEP.`
     },
     syllabus,
     officialExams,
@@ -312,144 +337,549 @@ export function generateClientOpposition(title: string, description: string = ""
   };
 }
 
-// 2. Generate case study adapted to the selected opposition
-export function generateClientCaseStudy(oppositionName: string, blocks?: string[]): any {
+// 2. Generate case study adapted to the specific opposition sector
+export function generateClientCaseStudy(oppositionName: string, blocks?: string[]): PracticalCase {
+  const { sector } = analyzeKeywords(oppositionName);
+
+  if (sector === "Sanidad") {
+    return {
+      id: "pc-sanidad-1",
+      title: `Caso Práctico de Sanidad (${oppositionName}): Confidencialidad e Consentimiento en Urgencias`,
+      year: 2026,
+      situation: "Un paciente de 17 años acude al servicio de urgencias hospitalarias tras sufrir un accidente laboral leve. Exige que no se informe a sus progenitores sobre el resultado de las analíticas practicadas y solicita copia íntegra de su historia clínica de forma inmediata. El profesional de guardia duda si el paciente tiene capacidad legal bastante para otorgar el consentimiento informado de forma autónoma según la ley de autonomía del paciente.",
+      questions: [
+        {
+          question: "¿A partir de qué edad se presume legalmente la capacidad del menor para otorgar consentimiento informado en el ámbito sanitario según la Ley 41/2002?",
+          legalBase: "Artículo 9.3.c de la Ley 41/2002 de Autonomía del Paciente.",
+          solution: "La Ley 41/2002 establece la regla general de la mayoría de edad sanitaria a los 16 años. Cuando el paciente mayor de 16 años o emancipiado no se halla incapacitado ni en situación de grave riesgo para su vida, es él quien otorga válidamente el consentimiento, sin que sea preceptivo informar a los padres salvo riesgo vital grave o incapacidad de hecho apreciada por el médico."
+        },
+        {
+          question: "¿Tiene derecho el paciente a obtener copia directa de su historia clínica en el servicio de urgencias?",
+          legalBase: "Artículo 18 de la Ley 41/2002.",
+          solution: "El paciente tiene derecho de acceso a la documentación de su historia clínica y a obtener copia de los datos que figuran en ella, garantizando el derecho de terceros a la confidencialidad de los datos recogidos en interés de estos y el derecho de los profesionales participantes a la reserva de sus notas subjetivas."
+        }
+      ]
+    };
+  }
+
+  if (sector === "Policía") {
+    return {
+      id: "pc-policia-1",
+      title: `Caso Práctico Operativo (${oppositionName}): Identificación y Registro Corporal Ex tunc`,
+      year: 2026,
+      situation: "Durante un patrullaje nocturno en prevención de la seguridad ciudadana, los agentes observan a dos personas que muestran nerviosismo al detectar la presencia policial. Se procede a requerir su identificación. Uno de ellos se niega de forma rotunda a mostrar documento alguno y profiere insultos. Los agentes deciden trasladarlo a las dependencias policiales a efectos de identificación y realizar un registro corporal externo exhaustivo.",
+      questions: [
+        {
+          question: "¿Cuál es el tiempo máximo legalmente establecido para la permanencia en dependencias policiales a los solos efectos de identificación?",
+          legalBase: "Artículo 16.2 de la Ley Orgánica 4/2015 de Protección de la Seguridad Ciudadana.",
+          solution: "La permanencia en dependencias policiales a los solos efectos de identificación no podrá superar el tiempo estrictamente necesario, que en ningún caso podrá exceder de 6 horas. Transcurrido dicho plazo sin haber logrado la identificación, la persona debe ser puesta en libertad inmediatamente o en su caso ser detenida si existieran indicios de delito."
+        },
+        {
+          question: "¿Requiere el registro corporal externo (cacheo) en la vía pública autorización judicial previo?",
+          legalBase: "Artículo 20 de la LO 4/2015.",
+          solution: "No requiere autorización judicial. El registro corporal externo puede realizarse cuando existan indicios de que la persona porta armas, objetos peligrosos o sustraídos, debiendo respetarse los principios de proporcionalidad, igualdad de trato y realizarse por un agente del mismo sexo salvo urgencia por riesgo grave e inminente."
+        }
+      ]
+    };
+  }
+
+  if (sector === "Bomberos") {
+    return {
+      id: "pc-bomberos-1",
+      title: `Caso Práctico Técnico (${oppositionName}): Intervención en Incendio Industrial con Fuga de Químicos`,
+      year: 2026,
+      situation: "Se recibe aviso de incendio en nave industrial de almacenamiento de productos químicos con presencia de garrafas de disolventes orgánicos (líquidos inflamables Clase B). Se detecta humo denso y riesgo inminente de explosión por BLEVE en un tanque contiguo. El equipo de primera intervención debe determinar el agente extintor prioritario, el peritorio de evacuación y la protección respiratoria adecuada.",
+      questions: [
+        {
+          question: "¿Qué tipo de agente extintor está contraindicado y cuál es el de elección para fuegos de Clase B (líquidos inflamables) de gran magnitud?",
+          legalBase: "Reglamento de Instalaciones de Protección contra Incendios y Manual Táctico de Bomberos.",
+          solution: "El agua a chorro directo está contraindicada en fuegos de Clase B por riesgo de esparcir el líquido inflamable denso. El agente extintor de elección es la espuma física de baja o media expansión (que sofoca al cortar la aportación de oxígeno e inhibir los vapores inflamables) o el polvo químico BC/ABC."
+        },
+        {
+          question: "¿Qué fenómeno físico define el riesgo de BLEVE y qué medida táctica urgente debe aplicarse al tanque afectado?",
+          legalBase: "Manual de Riesgo Químico e Intervención de Emergencias.",
+          solution: "El BLEVE (Boiling Liquid Expanding Vapor Explosion) ocurre cuando un recipiente a presión que contiene un líquido sobrecalentado sufre un fallo estructural catastrófico por fuego exterior. La medida táctica prioritaria es la refrigeración masiva con agua en forma de cortina sobre la zona superior del tanque (zona de vapor) desde posición parapetada."
+        }
+      ]
+    };
+  }
+
+  if (sector === "Justicia") {
+    return {
+      id: "pc-justicia-1",
+      title: `Caso Práctico Procesal (${oppositionName}): Impugnación de Resoluciones del Letrado de la AJ`,
+      year: 2026,
+      situation: "En el marco de un juicio ordinario civil, el Letrado de la Administración de Justicia dicta un Decreto acordando la inadmisión de una prueba documental extemporánea. La parte demandada considera que dicha resolución conculca su derecho a la tutela judicial efectiva y decide recurrir directamente en apelación ante la Audiencia Provincial.",
+      questions: [
+        {
+          question: "¿Es procedente el recurso de apelación interpuesto directamente contra el Decreto del Letrado de la AJ?",
+          legalBase: "Artículos 451, 452 y 454 bis de la Ley de Enjuiciamiento Civil.",
+          solution: "No es procedente. Contra los Decretos del Letrado de la AJ que no pongan fin al proceso cabe Recurso de Reposición ante el propio Letrado de la AJ o Recurso de Revisión ante el Juez/Tribunal titular del juzgado. La apelación ante la Audiencia Provincial sólo cabe contra resoluciones definitivas dictadas por el Juez (Autos o Sentencias)."
+        },
+        {
+          question: "¿Qué resolución dicta el Juez para resolver el recurso de revisión interpuesto contra el decreto del Letrado de la AJ?",
+          legalBase: "Artículo 454 bis.2 de la LEC.",
+          solution: "El Juez resuelve el recurso de revisión mediante Auto. Contra el Auto que resuelva el recurso de revisión sólo cabrá recurso de apelación si la resolución pone fin al procedimiento o falta el presupuesto procesal de procedibilidad."
+        }
+      ]
+    };
+  }
+
+  // Default General Admin Case Study
   return {
-    title: `Supuesto Práctico Complejo de Oposición: ${oppositionName}`,
-    situation: `El órgano instructor técnico ha incoado de oficio un expediente sancionador contra un particular o funcionario por presuntas infracciones graves. Durante el periodo de instrucción se han omitido las fases de alegaciones iniciales, reduciendo a la mitad los plazos aduciendo urgencia operativa de la dirección general. El interesado presenta alegaciones manifestando indefensión procesal y vulneración del principio de contradicción y debido proceso.`,
+    id: "pc-admin-1",
+    title: `Supuesto Práctico Administrativo (${oppositionName}): Notificación Electrónica y Silencio Administrativo`,
+    year: 2026,
+    situation: `Un interesado obligado a relacionarse electrónicamente con la Administración recibe el aviso de puesta a disposición de una resolución en la sede electrónica el día 2 de mayo de 2026. El interesado no accede al buzón electrónico hasta el 20 de mayo de 2026. El 22 de mayo interpone recurso de alzada considerando que la notificación surtió efecto el día que abrió el correo.`,
     questions: [
       {
-        question: `Considerando la situación para la oposición de ${oppositionName}, ¿existe vulneración formal determinante de la nulidad de pleno derecho en el expediente sancionador?`,
-        justification: "El artículo 47.1.e de la Ley 39/2015 determina que son nulos de pleno derecho los actos dictados prescindiendo total y absolutamente del procedimiento legalmente establecido. Reducir plazos de alegaciones a la mitad sin la debida declaración motivada de urgencia o saltarse la audiencia provoca indefensión constitucional evidente, lo que encaja en causas de nulidad tasadas de acuerdo con la jurisprudencia del Tribunal Supremo."
+        question: "¿En qué fecha se entiende legalmente rechazada y notificada la resolución electrónica?",
+        legalBase: "Artículo 43.2 de la Ley 39/2015, del Procedimiento Administrativo Común.",
+        solution: "Transcurridos 10 días naturales desde la puesta a disposición de la notificación sin que se acceda a su contenido, se entenderá que la notificación ha sido rechazada. Al ponerse a disposición el 2 de mayo, transcurridos 10 días naturales (12 de mayo), la notificación se tiene por efectuada a todos los efectos legales el 12 de mayo de 2026."
       },
       {
-        question: "¿Qué recursos administrativos proceden contra un acto de trámite cualificado como este?",
-        justification: "Los actos de trámite que determinen la imposibilidad de continuar el procedimiento o produzcan indefensión (actos de trámite cualificados) pueden ser recurridos de manera independiente en alzada o reposición de conformidad con el artículo 112.1 de la Ley 39/2015, abriendo la vía para evitar que el vicio contamine el acto final definitivo."
+        question: "¿Está en plazo el recurso de alzada interpuesto el 22 de mayo de 2026?",
+        legalBase: "Artículos 30 y 122.1 de la Ley 39/2015.",
+        solution: "El plazo para interponer el recurso de alzada es de 1 mes contado desde el día siguiente a aquel en que se entienda efectuada la notificación. Habiéndose tenido por notificado el 12 de mayo, el plazo finaliza el 12 de junio; por tanto, el recurso interpuesto el 22 de mayo está perfectamente dentro de plazo."
       }
-    ],
-    tipsForTribunal: `Para la oposición de ${oppositionName}, el tribunal valorará muy positivamente que menciones con precisión quirúrgica el artículo 47.1.e (nulidad radical por prescindir del procedimiento) y lo distingas de la mera anulabilidad por defectos de forma del artículo 48 de la Ley 39/2015. Cita siempre la doctrina del Tribunal Supremo sobre el concepto de 'indefensión material de carácter constitucional'.`
+    ]
   };
 }
 
-// 3. Generate mnemonic adapted to selected opposition
+// 3. Generate mnemonic adapted to selected opposition and specific concept
 export function generateClientMnemonic(concept: string, context?: string): any {
-  // Generate customized mnemonic formula
-  const titleWords = concept.split(" ");
-  const abbreviation = titleWords.map(w => w[0] || "").join("").toUpperCase().slice(0, 5);
+  const { sector } = analyzeKeywords(context || concept);
   
+  // Clean acronym formula
+  const words = concept.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, "").split(/\s+/).filter(w => w.length > 2);
+  const initials = words.map(w => w[0].toUpperCase()).slice(0, 5).join("");
+  const formula = initials.length >= 2 ? initials : "MNE-MO-TEST";
+
+  let specificAdvice = "Asocia cada letra de la fórmula a la secuencia de artículos de la ley.";
+  let mentalImage = `Visualiza una tarjeta de estudio dorada donde la sigla ${formula} brilla intensamente, evitando las preguntas trampa en ${context || "el examen"}.`;
+
+  if (sector === "Sanidad") {
+    specificAdvice = "Memoriza este concepto conectándolo con las 3 fases del protocolo asistencial y los derechos de la Ley 41/2002.";
+    mentalImage = `Imagina una bata blanca médica con las letras ${formula} bordadas en hilo verde sanitario, recordando la prioridad asistencial.`;
+  } else if (sector === "Policía" || sector === "Bomberos") {
+    specificAdvice = "Fija los límites legales de actuación recordando los principios de proporcionalidad y adecuación de la LO 2/1986.";
+    mentalImage = `Imagina un escudo de protección con el grabado ${formula} en relieve que frena los intentos de confusión del tribunal.`;
+  } else if (sector === "Justicia") {
+    specificAdvice = "Diferencia con nitidez las competencias del Juez (Auto/Sentencia) frente a las del Letrado AJ (Decreto/Diligencia).";
+    mentalImage = `Visualiza la mesa de un tribunal con una balanza de justicia y las siglas ${formula} grabadas en el mazo oficial.`;
+  }
+
   return {
     concept: concept,
-    difficultyWhy: `Este concepto para ${context || "Oposiciones"} resulta complejo debido a que el tribunal suele formular preguntas que confunden los supuestos ordinarios con los excepcionales, alterando palabras clave como 'podrá' y 'deberá'.`,
+    difficultyWhy: `Este concepto de ${context || "tu temario"} presenta una tasa de fallo superior al 65% en los exámenes debido a que el tribunal sustituye sutilmente plazos en días por meses o modifica verbos de obligación.`,
     mnemonics: [
       {
-        type: "Fórmula de Regla de Oro",
-        formula: abbreviation ? `L-E-Y - ${abbreviation}` : "MNE-MO-TEG",
-        explanation: `Regla nemotécnica adaptada: Asocia cada parte del concepto "${concept}" con una sigla memorable para consolidar la secuencia jerárquica en los exámenes tipo test.`
+        type: "Regla Mnemotécnica de Alto Rendimiento",
+        formula: formula,
+        explanation: `${specificAdvice} La sigla "${formula}" resume la estructura lógica de "${concept}" para responder en menos de 15 segundos.`
       }
     ],
-    mentalAssociationImage: `Visualiza un archivador gigante de color azul índigo en el que guardas una caja fuerte marcada con las letras doradas de la regla de oro, protegiendo este concepto de los vicios del tribunal de ${context || "Oposiciones"}.`,
-    retentionTestQuestion: `¿Cuál es el núcleo del fundamento legal de "${concept}"? (Respuesta: Comprobar que encaje de forma exacta con la regla nemotécnica memorizada, descartando las falsas excepciones del test).`
+    mentalAssociationImage: mentalImage,
+    retentionTestQuestion: `¿Cuál es el núcleo del fundamento normativo de "${concept}"? (Verificación: Comprobar que encaje de forma exacta con la fórmula ${formula} memorizada).`
   };
 }
 
-// 4. Generate traps & patterns adapted to selected opposition
-export function generateClientPatterns(oppositionName: string, years: number[]): any {
+// 4. Generate traps & patterns adapted specifically to the exact opposition name, organism, and specialty
+export function generateClientPatterns(oppositionName: string, years: number[], specialty?: string): any {
+  const queryText = specialty && specialty !== "all" ? `${specialty} ${oppositionName}` : oppositionName;
+  const { group, adminType, region, sector } = analyzeKeywords(queryText);
+
+  const cleanTitle = oppositionName.trim();
+
+  // Sector 1: Sanidad
+  if (sector === "Sanidad") {
+    const healthOrganism = cleanTitle.includes("SERMAS") ? "Servicio Madrileño de Salud (SERMAS)" :
+      cleanTitle.includes("SAS") || cleanTitle.includes("Andalucía") ? "Servicio Andaluz de Salud (SAS)" :
+      cleanTitle.includes("Generalitat") || cleanTitle.includes("Valencia") ? "Conselleria de Sanitat Valenciana" :
+      cleanTitle.includes("SERGAS") || cleanTitle.includes("Galicia") ? "Servicio Galego de Saúde (SERGAS)" :
+      `Servicio de Salud de ${region !== "Nacional" ? region : "la Administración de Destino"}`;
+
+    return {
+      opposition: cleanTitle,
+      typicalTraps: [
+        {
+          name: `Consentimiento Informado en ${cleanTitle}: Verbal vs. Escrito`,
+          mechanism: `En los exámenes de ${cleanTitle}, el tribunal suele afirmar que el consentimiento informado debe formalizarse SIEMPRE por escrito en la ficha del centro, omitiendo que la regla general es la forma VERBAL salvo para intervenciones quirúrgicas, procedimientos diagnósticos invasivos o de riesgo.`,
+          howToAvoid: "Aplica la regla general: VERBAL para actuaciones ordinarias. ESCRITO solo para cirugía, pruebas invasivas y procedimientos con riesgo grave para la salud."
+        },
+        {
+          name: `Competencias del ${healthOrganism} vs Ley 41/2002 de Autonomía del Paciente`,
+          mechanism: "Confundir los plazos de conservación del historial clínico (mínimo 5 años desde el alta de cada proceso) con la caducidad de expedientes disciplinarios del personal estatutario.",
+          howToAvoid: "Distingue entre la normativa asistencial (Ley 41/2002) y el régimen de personal estatutario (Ley 55/2003 del Estatuto Marco y normativa autonómica del organismo)."
+        }
+      ],
+      mockTrapQuestions: [
+        {
+          question: `Para la oposición de ${cleanTitle} (${healthOrganism}), ¿cuál es la regla general sobre la forma de prestación del consentimiento informado por parte del usuario?`,
+          options: [
+            "Debe ser prestado siempre por escrito ante el servicio de admisión",
+            "Se prestará por regla general de forma VERBAL, requiriéndose la forma escrita de forma excepcional en intervenciones quirúrgicas o procedimientos invasivos",
+            "Requiere ratificación de un testigo del cuadro del centro sanitario",
+            "Es potestativo del médico exigirlo siempre por escrito mediante documento notarial"
+          ],
+          correctIndex: 1,
+          explanation: "El artículo 8.2 de la Ley 41/2002 indica que el consentimiento se prestará por regla general de forma verbal."
+        }
+      ],
+      keyAdvice: `Para aprobar ${cleanTitle}, analiza los términos imperativos ('deberá' vs 'podrá') en la normativa del ${healthOrganism} y los plazos de la Ley 41/2002 y Ley 55/2003.`
+    };
+  }
+
+  // Sector 2: Policía / Seguridad
+  if (sector === "Policía") {
+    return {
+      opposition: cleanTitle,
+      typicalTraps: [
+        {
+          name: `Límites Temporales de Actuación en ${cleanTitle}: Identificación vs Detención`,
+          mechanism: `El tribunal del proceso selectivo de ${cleanTitle} intenta confundir el tiempo máximo de retención para identificación en comisaría (máximo 6 horas) con la detención preventiva por delito (máximo 72 horas).`,
+          howToAvoid: "Identificación administrativa = Máximo 6 horas (infranqueable). Detención por delito = Máximo 72 horas para puesta a disposición judicial."
+        },
+        {
+          name: "Inviolabilidad del Domicilio y Flagrante Delito",
+          mechanism: "Afirmar que los agentes requieren autorización administrativa previa para acceder a un inmueble en caso de flagrante delito.",
+          howToAvoid: "Las causas constitucionales del Art. 18.2 CE no requieren trámite administrativo: Consentimiento del titular, resolución judicial o flagrante delito."
+        }
+      ],
+      mockTrapQuestions: [
+        {
+          question: `En el ámbito de actuación de la convocatoria para ${cleanTitle}, ¿cuál es el plazo máximo de retención en dependencias policiales a los solos efectos de identificación según la LO 4/2015?`,
+          options: [
+            "24 horas con prórroga del delegado",
+            "El tiempo strictly necesario, que en ningún caso podrá superar las 6 horas",
+            "72 horas salvo levantamiento de habeas corpus",
+            "48 horas si el interesado no porta documento de identidad"
+          ],
+          correctIndex: 1,
+          explanation: "El artículo 16.2 de la LO 4/2015 determina que el tiempo de permanencia a efectos de identificación no podrá exceder en ningún caso de 6 horas."
+        }
+      ],
+      keyAdvice: `En el examen de ${cleanTitle}, vigila la distinción entre infracción administrativa de seguridad ciudadana y delito penal.`
+    };
+  }
+
+  // Sector 3: Local / Ayuntamiento / Diputación
+  if (adminType === "Local") {
+    const localOrganism = cleanTitle.includes("Ayuntamiento") ? cleanTitle.split("Ayuntamiento")[1]?.split("-")[0]?.trim() || "el Ayuntamiento convocante" : "la Entidad Local convocante";
+
+    return {
+      opposition: cleanTitle,
+      typicalTraps: [
+        {
+          name: `Competencias del Pleno vs. Alcalde en ${cleanTitle} (Ley 7/1985 LBRL)`,
+          mechanism: `Sustituir la atribución de competencias de aprobación de presupuestos u ordenanzas municipales asignándoselas al Alcalde en lugar del Pleno de ${localOrganism}.`,
+          howToAvoid: "Aprobación de Presupuestos, Plantillas de Personal y Ordenanzas Municipales = Competencia del PLENO (Art. 22 LBRL). Dirección del gobierno local y jefatura de personal = Competencia del ALCALDE (Art. 21 LBRL)."
+        },
+        {
+          name: "Régimen de Mayorías en los Órganos Colegiados Locales",
+          mechanism: "Exigir mayoría absoluta para acuerdos que únicamente requieren mayoría simple de los miembros presentes.",
+          howToAvoid: "Regla general en régimen local: Mayoría SIMPLE. Mayoría ABSOLUTA solo para asuntos tasados (Art. 47.2 LBRL: reglamentos, deslindes, concesiones mayores)."
+        }
+      ],
+      mockTrapQuestions: [
+        {
+          question: `En el marco de la organización de ${cleanTitle}, ¿a qué órgano municipal corresponde la aprobación definitiva de las Ordenanzas y del Presupuesto General conforme a la Ley 7/1985 (LBRL)?`,
+          options: [
+            "A la Junta de Gobierno Local previa delegación",
+            "Al Pleno de la Corporación Municipal",
+            "Al Alcalde mediante Decreto de Alcaldía",
+            "Al Secretario General del Ayuntamiento"
+          ],
+          correctIndex: 1,
+          explanation: "El artículo 22.2 de la Ley 7/1985 (LBRL) atribuye en exclusiva al Pleno la aprobación del presupuesto y las ordenanzas."
+        }
+      ],
+      keyAdvice: `En ${cleanTitle}, domina la Ley 7/1985 (LBRL) y el Reglamento de Organización y Funcionamiento (ROF) aplicable a ${localOrganism}.`
+    };
+  }
+
+  // Sector 4: Autonómico
+  if (adminType === "Autonómica") {
+    return {
+      opposition: cleanTitle,
+      typicalTraps: [
+        {
+          name: `Legislación Autonómica de ${region} vs. Normativa Estatal Básica`,
+          mechanism: `Presentar como norma básica estatal un artículo específico del Estatuto de Autonomía o ley de la función pública de ${region}.`,
+          howToAvoid: "Identifica qué materias son competencia exclusiva estatal (Art. 149.1 CE: bases del régimen jurídico de AAPP, procedimiento administrativo) y cuáles son de desarrollo estatutario de " + region + "."
+        },
+        {
+          name: "Plazos de Recursos Administrativos Autonómicos",
+          mechanism: "Modificar el plazo del recurso de alzada o reposición en la ley del procedimiento de la Comunidad Autónoma.",
+          howToAvoid: "Los plazos de recursos administrativos los fija de forma homogénea e imperativa la Ley 39/2015 (1 mes para alzada y reposición expresos)."
+        }
+      ],
+      mockTrapQuestions: [
+        {
+          question: `En el proceso selectivo de ${cleanTitle}, ¿qué norma autonómica ostenta el rango de norma institucional básica en el ámbito territorial de ${region}?`,
+          options: [
+            "El Reglamento Orgánico del Consejo de Gobierno",
+            "El Estatuto de Autonomía de " + region,
+            "La Ley del Procedimiento Administrativo Común",
+            "El Real Decreto Legislativo 5/2015 (TREBEP)"
+          ],
+          correctIndex: 1,
+          explanation: "El Estatuto de Autonomía es la norma institucional básica de la Comunidad Autónoma según el artículo 147 de la Constitución Española."
+        }
+      ],
+      keyAdvice: `Atención en ${cleanTitle}: diferencia la legislación básica del Estado de las especialidades de la administración autonómica de ${region}.`
+    };
+  }
+
+  // Default: Custom Opposition Traps
   return {
-    opposition: oppositionName,
+    opposition: cleanTitle,
     typicalTraps: [
       {
-        name: `Intercambio de Plazos por Días Hábiles e Inhábiles`,
-        mechanism: `El tribunal de la oposición de ${oppositionName} manipula plazos en días. Colocan distractores con cómputos en días naturales cuando la norma general indica expresamente días hábiles.`,
-        howToAvoid: "Recuerda que en el cómputo administrativo regulado por la Ley 39/2015, los días son hábiles de forma presunta (excluyendo sábados, domingos y festivos), a menos que la ley disponga expresamente lo contrario."
+        name: `Cómputo de Plazos en la Convocatoria de ${cleanTitle} (Ley 39/2015)`,
+        mechanism: `En el examen de ${cleanTitle}, el tribunal suele formular supuestos considerando los sábados como días hábiles o dando por sentadas notificaciones en días festivos.`,
+        howToAvoid: "Desde la Ley 39/2015, los sábados son INHÁBILES en toda la Administración Pública. Los plazos en días se presumen siempre hábiles excluyendo sábados, domingos y festivos."
       },
       {
-        name: "Abuso de los Verbos de Facultad vs. Obligación",
-        mechanism: "Cambiar sistemáticamente palabras como 'podrá' (facultad de la Administración) por 'deberá' o 'tendrá' (obligación reglamentaria) en los enunciados normativos oficiales para descartar opositores.",
-        howToAvoid: "Repasa los artículos identificando si la potestad de la Administración es discrecional ('podrá') o reglada ('deberá'), ya que el tribunal construye distractores falsos intercambiando estos términos."
+        name: `Régimen Disciplinario del Personal en ${cleanTitle} (TREBEP)`,
+        mechanism: "Intercambiar los plazos de prescripción de faltas graves (2 años) y muy graves (3 años) o de las sanciones impuestas.",
+        howToAvoid: "Prescripción de faltas (Art. 97 TREBEP): Muy graves = 3 años; Graves = 2 años; Leves = 6 meses. ¡Aprende el trienio 3-2-6!"
       }
     ],
     mockTrapQuestions: [
       {
-        question: `En relación con el temario oficial de ${oppositionName}, un órgano administrativo recibe una solicitud formal. Si un artículo estipula que la delegación 'podrá suspender el procedimiento', ¿cuál es el carácter de esta potestad?`,
+        question: `Respecto al proceso selectivo y régimen jurídico aplicable en ${cleanTitle}, ¿cómo se computan los plazos señalados por días según el artículo 30 de la Ley 39/2015?`,
         options: [
-          "Es una obligación reglada e inexcusable que debe aplicarse de forma automática",
-          "Es una facultad de libre apreciación (discrecional) que el órgano puede o no aplicar justificadamente",
-          "Produce la nulidad inmediata de las actuaciones si no se suspende",
-          "Requiere previa autorización del órgano superior jerárquico obligatoriamente"
+          "Se entienden siempre como días naturales salvo que expresamente se indique lo contrario",
+          "Se entienden como días hábiles, excluyéndose del cómputo los sábados, los domingos y los declarados festivos",
+          "Se computan incluyendo los sábados pero excluyendo los festivos locales",
+          "Depende de la fecha del boletín de publicación"
         ],
         correctIndex: 1,
-        explanation: "La palabra 'podrá' atribuye una potestad discrecional o facultad, no una obligación reglada. El tribunal suele cambiarla por 'deberá' para crear distractores que simulen mandatos imperativos."
+        explanation: "El artículo 30.2 de la Ley 39/2015 dictamina que salvo que por ley se disponga otra cosa, los plazos por días se entienden hábiles, excluyendo sábados, domingos y festivos."
       }
     ],
-    keyAdvice: `Para superar el test de ${oppositionName} con éxito, tómate al menos 30 segundos por pregunta para leer la frase completa. El 80% de los opositores fallan por leer apresuradamente y no detectar la sutil sustitución de palabras trampa como 'podrá' o la inclusión de sábados en el cálculo.`
+    keyAdvice: `Para la oposición de ${cleanTitle}, repasa exhaustivamente los plazos exactos del TREBEP y la Ley 39/2015 para evitar errores habituales del examen.`
   };
 }
 
-// 5. Generate test questions adapted to selected opposition
+// 5. Generate test questions adapted to selected opposition sector and topics
 export function generateClientTest(oppositionName: string, blocks?: string[], count: number = 5, difficulty: string = "Medio"): any {
   const { sector } = analyzeKeywords(oppositionName);
-  const questions: any[] = [];
   
-  const questionPool = [
-    {
-      question: `En la oposición de ${oppositionName}, ¿cuál de los siguientes plazos se computa a partir del día siguiente al de la publicación oficial de la convocatoria?`,
-      options: [
-        "El plazo de subsanación de errores en las listas provisionales",
-        "El plazo general de presentación de instancias de participación, que es de 20 días hábiles",
-        "El plazo para resolver la oposición por parte del tribunal examinador",
-        "El plazo para la realización del primer ejercicio práctico"
-      ],
-      correctIndex: 1,
-      justification: "Por regla general en el derecho de la función pública, la presentación de solicitudes de participación es de 20 días hábiles contados a partir del día siguiente al de la publicación de la convocatoria oficial en el diario correspondiente."
-    },
-    {
-      question: `De acuerdo con la legislación administrativa básica aplicable a ${oppositionName}, la recusación de un miembro del tribunal de selección:`,
-      options: [
-        "Solo puede proponerse por escrito en el mismo día del examen ante el presidente",
-        "Podrá promoverse por los interesados en cualquier momento de la tramitación del procedimiento, debiendo resolverse en el plazo de 3 días",
-        "Carece de efectos suspensivos sobre la marcha de las pruebas selectivas en todo caso",
-        "No es admisible si el miembro del tribunal es un funcionario del subgrupo superior A1"
-      ],
-      correctIndex: 1,
-      justification: "El artículo 24 de la Ley 40/2015 regula la recusación, la cual puede promoverse en cualquier momento por escrito alegando causas tasadas (amistad, parentesco, interés directo), debiendo el recusado manifestar si se da o no la causa en el día siguiente."
-    },
-    {
-      question: `Frente a las resoluciones dictadas por el tribunal de selección en la oposición de ${oppositionName}, al no agotar la vía administrativa de forma directa, ¿qué recurso cabe interponer?`,
-      options: [
-        "Recurso de reposición potestativo en el plazo de un mes",
-        "Recurso extraordinario de revisión de forma obligatoria",
-        "Recurso de alzada ante el órgano de la Administración pública que nombró al tribunal examinador",
-        "Reclamación de queja judicial inmediata en los 5 días hábiles"
-      ],
-      correctIndex: 2,
-      justification: "Las resoluciones de los tribunales de selección de personal se consideran actos de trámite cualificados que no ponen fin a la vía administrativa; por tanto, cabe recurso de alzada ante el órgano administrativo que dispuso su nombramiento."
-    },
-    {
-      question: `En el ámbito de la preparación de ${oppositionName}, ¿cuál de las siguientes opciones constituye un principio constitucional rector del acceso a la función pública española?`,
-      options: [
-        "Principio de antigüedad preferente para interinos de larga duración",
-        "Principios de igualdad, mérito y capacidad regulados en los artículos 14, 23.2 y 103.3 de la CE",
-        "Principio de territorialidad preferente según la provincia de nacimiento",
-        "Principio de exención total de pruebas prácticas para titulados con alta nota académica"
-      ],
-      correctIndex: 1,
-      justification: "La Constitución Española consagra en sus artículos 14 (igualdad), 23.2 (acceso a cargos públicos en condiciones de igualdad) y 103.3 (principios de mérito y capacidad para el acceso a la función pública) los pilares de la selección del empleo público."
-    },
-    {
-      question: `De acuerdo con la Ley 39/2015 aplicable a las pruebas de ${oppositionName}, si el último día de un plazo expresado en días hábiles coincide con un sábado declarado festivo local en el municipio de destino, dicho día se considera:`,
-      options: [
-        "Inhábil a efectos de cómputo, trasladándose el vencimiento al siguiente día hábil",
-        "Habilísimo, debiendo registrarse la instancia de forma electrónica obligatoriamente ese día",
-        "Natural computable, finalizando el plazo a las 14:00 horas del sábado",
-        "Día de prórroga automática de 5 días adicionales concedidos por ley"
-      ],
-      correctIndex: 0,
-      justification: "Según el artículo 30 de la Ley 39/2015, si un día es inhábil en el municipio de residencia del interesado o en el del órgano administrativo competente, se considerará inhábil en todo caso, prorrogándose el vencimiento al primer día hábil siguiente."
-    }
-  ];
+  let pool: any[] = [];
 
-  // Return the desired number of questions from pool
-  return {
-    questions: questionPool.slice(0, Math.min(count, questionPool.length))
-  };
+  if (sector === "Sanidad") {
+    pool = [
+      {
+        question: `En relación con la Ley 41/2002 de Autonomía del Paciente, ¿a quién pertenece la titularidad del derecho a la información asistencial?`,
+        options: [
+          "Al médico responsable de la unidad obligatoriamente",
+          "Al paciente, y también se informará a las personas vinculadas a él por razones familiares o de hecho en la medida en que el paciente lo permita de manera expresa o tácita",
+          "Únicamente al cónyuge o familiar más cercano firmado en la ficha de ingreso",
+          "Al director del centro sanitario público"
+        ],
+        correctIndex: 1,
+        justification: "El artículo 5.1 de la Ley 41/2002 establece que el titular del derecho a la información es el paciente."
+      },
+      {
+        question: `De acuerdo con el Estatuto Marco (Ley 55/2003), el personal estatutario de los servicios de salud que sea nombrado para la realización de funciones de carácter temporal o coyuntural se clasifica como:`,
+        options: [
+          "Personal estatutario fijo de carrera",
+          "Personal estatutario temporal (interino, eventual o de sustitución)",
+          "Personal laboral indefinido no fijo",
+          "Personal funcionario eventual del ministerio"
+        ],
+        correctIndex: 1,
+        justification: "El artículo 9 de la Ley 55/2003 clasifica al personal estatutario temporal en interino, eventual y de sustitución."
+      },
+      {
+        question: `Según la Ley 41/2002, ¿cuál de los siguientes documentos es un requisito formal indispensable para otorgar la representación en las Instrucciones Previas (testamento vital)?`,
+        options: [
+          "Declaración verbal ante dos enfermeros de planta",
+          "Formalización ante Notario o mediante documento público ante tres testigos (dos de los cuales no tengan relación de parentesco)",
+          "Simple nota manuscrita guardada en el historial asistencial",
+          "Autorización expresa de la Consejería de Sanidad"
+        ],
+        correctIndex: 1,
+        justification: "El artículo 11 de la Ley 41/2002 exige formalización ante Notario o ante tres testigos sin vinculación de parentesco."
+      },
+      {
+        question: `¿Qué plazo de conservación de la documentación clínica garantiza la Ley 41/2002 como mínimo legal a partir de la fecha del alta de cada proceso asistencial?`,
+        options: [
+          "Como mínimo 1 año desde la fecha de alta",
+          "Como mínimo 5 años contados desde la fecha del alta de cada proceso asistencial",
+          "Como mínimo 10 años en el archivo central",
+          "Indefinidamente sin posibilidad de expurgo"
+        ],
+        correctIndex: 1,
+        justification: "El artículo 17.1 de la Ley 41/2002 fija en 5 años el plazo mínimo de conservación de la historia clínica desde la fecha del alta."
+      },
+      {
+        question: `Conforme a la Ley 55/2003 del Estatuto Marco, la sanción de separación del servicio del personal estatutario solo podrá imponerse por la comisión de:`,
+        options: [
+          "Faltas leves reiteradas en un trimestre",
+          "Faltas graves de puntualidad",
+          "Faltas muy graves tipificadas en el artículo 72",
+          "Incumplimiento de horario de guardia no continuada"
+        ],
+        correctIndex: 2,
+        justification: "El artículo 73.1.a de la Ley 55/2003 determina que la separación del servicio solo procede ante la comisión de faltas muy graves."
+      }
+    ];
+  } else if (sector === "Policía") {
+    pool = [
+      {
+        question: `Conforme al artículo 18.2 de la Constitución Española, el domicilio es inviolable. ¿En qué casos se autoriza la entrada o registro en él sin consentimiento del titular?`,
+        options: [
+          "Por decisión motivada del Comisario de Policía",
+          "Únicamente mediante resolución judicial o en caso de flagrante delito",
+          "Por orden verbal del Alcalde del municipio",
+          "En cualquier inspección administrativa ordinaria"
+        ],
+        correctIndex: 1,
+        justification: "El artículo 18.2 de la CE consagra que ninguna entrada o registro podrá hacerse en el domicilio sin consentimiento del titular o resolución judicial, salvo en caso de flagrante delito."
+      },
+      {
+        question: `Según la LO 2/1986 de Fuerzas y Cuerpos de Seguridad, los principios básicos de actuación imponen que los miembros de las FCS deben actuar con:`,
+        options: [
+          "Absoluta neutralidad política e imparcialidad, y bajo los principios de jerarquía y subordinación",
+          "Autonomía decisoria al margen del mando",
+          "Prioridad de uso de la fuerza sobre la negociación verbal",
+          "Criterios de oportunidad comercial"
+        ],
+        correctIndex: 0,
+        justification: "El artículo 5 de la LO 2/1986 fija como principios básicos la neutralidad política, imparcialidad y jerarquía."
+      },
+      {
+        question: `De acuerdo con la LO 4/2015 de Protección de la Seguridad Ciudadana, la negativa a identificarse a requerimiento de los agentes de la autoridad constituye:`,
+        options: [
+          "Una falta leve penal de injurias",
+          "Una infracción administrativa GRAVE contra la seguridad ciudadana",
+          "Una falta administrativa de carácter superflua",
+          "Un delito de desobediencia que exige prisión inmediata"
+        ],
+        correctIndex: 1,
+        justification: "El artículo 36.6 de la LO 4/2015 tipifica la negativa a identificarse como infracción grave."
+      },
+      {
+        question: `En la diligencia de identificación en dependencias policiales regulada en el artículo 16 de la LO 4/2015, los agentes expedirán al interesado al finalizar la misma:`,
+        options: [
+          "Un carné provisional de residencia",
+          "Un volante acreditativo del tiempo de permanencia en el que consten los motivos de la identificación",
+          "Una sanción pecuniaria directa de 100 euros",
+          "Una citación para el juzgado de lo penal"
+        ],
+        correctIndex: 1,
+        justification: "El artículo 16.2 de la LO 4/2015 exige expedir a la persona identificada un volante acreditativo del tiempo de permanencia."
+      }
+    ];
+  } else if (sector === "Justicia") {
+    pool = [
+      {
+        question: `En un procedimiento civil ordinario, ¿cuál es el plazo general para contestar a la demanda a contar desde el día siguiente a la citación o emplazamiento?`,
+        options: [
+          "10 días hábiles",
+          "20 días hábiles",
+          "15 días naturales",
+          "1 mes natural"
+        ],
+        correctIndex: 1,
+        justification: "El artículo 404 de la LEC estipula el plazo de 20 días hábiles para contestar a la demanda en el juicio ordinario."
+      },
+      {
+        question: `¿A qué Cuerpo de la Administración de Justicia corresponde la ejecución de los embargos, lanzamientos y demás actos de auxilio judicial?`,
+        options: [
+          "Al Cuerpo de Gestores Procesales únicamente",
+          "Al Cuerpo de Auxilio Judicial",
+          "Al Cuerpo de Tramitación Procesal",
+          "A la Policía Local encargada del término"
+        ],
+        correctIndex: 1,
+        justification: "El artículo 478 de la LOPJ atribuye al Cuerpo de Auxilio Judicial la práctica de notificaciones, citaciones, emplazamientos, embargos y lanzamientos."
+      },
+      {
+        question: `Las resoluciones del Letrado de la Administración de Justicia mediante las cuales se pone fin a un procedimiento del que tenga atribuida competencia exclusiva se denominan:`,
+        options: [
+          "Providencias",
+          "Decretos",
+          "Diligencias de ordenación",
+          "Autos de archivo"
+        ],
+        correctIndex: 1,
+        justification: "El artículo 206.2 de la LEC establece que el Letrado de la AJ dictará Decreto cuando se ponga fin al procedimiento o se resuelva la admisión de demandas."
+      }
+    ];
+  } else {
+    // General Admin / Hacienda / Educación Pool
+    pool = [
+      {
+        question: `En relación con la Ley 39/2015, ¿cuál de los siguientes actos administrativos es NULO de pleno derecho?`,
+        options: [
+          "El dictado con defecto de forma que no produce indefensión",
+          "El dictado por un órgano manifiestamente incompetente por razón de la materia o del territorio",
+          "El notificado con retraso de 3 días sobre el plazo legal",
+          "El expedido sin firma electrónica delegada"
+        ],
+        correctIndex: 1,
+        justification: "Según el artículo 47.1.b de la Ley 39/2015, son nulos de pleno derecho los actos dictados por órganos manifiestamente incompetentes por razón de la materia o del territorio."
+      },
+      {
+        question: `Conforme al artículo 21.2 de la Ley 39/2015, cuando la norma reguladora del procedimiento no fije el plazo máximo para resolver y notificar, dicho plazo será de:`,
+        options: [
+          "1 mes",
+          "3 meses",
+          "6 meses",
+          "20 días hábiles"
+        ],
+        correctIndex: 1,
+        justification: "El artículo 21.2 de la Ley 39/2015 señala que cuando la norma no fije un plazo explícito, este no podrá exceder de 3 meses."
+      },
+      {
+        question: `De acuerdo con el Estatuto Básico del Empleado Público (TREBEP), las faltas disciplinarias prescriben:`,
+        options: [
+          "Las muy graves a los 3 años, las graves a los 2 años y las leves a los 6 meses",
+          "Todas prescriben al año de su comisión",
+          "Las muy graves a los 5 años y las leves a los 3 meses",
+          "No prescriben nunca si afectan al presupuesto público"
+        ],
+        correctIndex: 0,
+        justification: "El artículo 97 del TREBEP establece que las faltas muy graves prescriben a los 3 años, las graves a los 2 años y las leves a los 6 meses."
+      },
+      {
+        question: `Frente a una resolución expresa que pone fin a la vía administrativa, ¿qué recurso administrativo cabe interponer de forma POTESTATIVA antes de acudir a la vía contencioso-administrativa?`,
+        options: [
+          "Recurso de Alzada en el plazo de 1 mes",
+          "Recurso Potestativo de Reposición en el plazo de 1 mes",
+          "Recurso Extraordinario de Revisión en 3 meses",
+          "Reclamación previa civil en 20 días"
+        ],
+        correctIndex: 1,
+        justification: "El artículo 123 de la Ley 39/2015 regula el recurso potestativo de reposición ante el mismo órgano que dictó el acto en el plazo de un mes."
+      },
+      {
+        question: `Según el artículo 30.5 de la Ley 39/2015, cuando un día fuese hábil en el municipio de residencia del interesado e inhábil en la sede del órgano administrativo:`,
+        options: [
+          "Se considerará hábil a todos los efectos",
+          "Se considerará inhábil en todo caso",
+          "Se computará como medio día hábil",
+          "Exige solicitar prórroga de plazo expresamente"
+        ],
+        correctIndex: 1,
+        justification: "El artículo 30.5 de la Ley 39/2015 dicta que cuando un día sea inhábil en el municipio del interesado o en el del órgano competente, se considerará inhábil en todo caso."
+      }
+    ];
+  }
+
+  // Slice or multiply to return desired count
+  const result: any[] = [];
+  for (let i = 0; i < count; i++) {
+    const q = pool[i % pool.length];
+    result.push({
+      ...q,
+      question: count > pool.length ? `[Pregunta ${i + 1}] ${q.question}` : q.question
+    });
+  }
+
+  return { questions: result };
 }

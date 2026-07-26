@@ -88,7 +88,7 @@ async function generateAISchema(params: {
       }
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
         config,
       });
@@ -683,21 +683,21 @@ Genera una respuesta en formato JSON con la siguiente estructura exacta:
 // API endpoint to analyze patterns & trap questions (trampas y patrones)
 app.post("/api/gemini/analyze-patterns", async (req: Request, res: Response) => {
   try {
-    const { opposition, startYear } = req.body;
+    const { opposition, startYear, specialty } = req.body;
     if (!opposition) {
       res.status(400).json({ error: "Oposición no especificada." });
       return;
     }
 
-    const prompt = `Analiza patrones de preguntas difíciles, confusas o "trampa" en los exámenes de la oposición "${opposition}" desde el año ${startYear || 2020}.
-Determina qué tipo de trucos utiliza el tribunal (modificar plazos ligeramente, cambiar palabras como 'podrá' por 'deberá', falsas excepciones, etc.) y aporta 3 ejemplos prácticos con explicaciones detalladas.
+    const prompt = `Analiza patrones de preguntas difíciles, confusas o "trampa" en los exámenes de la oposición "${opposition}" ${specialty ? `(Especialidad/Bloque específico: "${specialty}")` : ""} desde el año ${startYear || 2020}.
+Determina qué tipo de trucos utiliza el tribunal (modificar plazos ligeramente, cambiar palabras como 'podrá' por 'deberá', falsas excepciones, errores de concepto técnico en ${specialty || opposition}, etc.) y aporta 3 ejemplos prácticos con explicaciones detalladas.
 
 Genera una respuesta en formato JSON con la siguiente estructura exacta:
 {
   "opposition": "Oposición analizada",
   "typicalTraps": [
     {
-      "name": "Tipo de trampa (ej: El cambio del verbo imperativo)",
+      "name": "Tipo de trampa (ej: El cambio del verbo imperativo en la especialidad)",
       "mechanism": "Cómo funciona el truco para engañar al opositor.",
       "howToAvoid": "Estrategia para detectarlo al leer el examen."
     }

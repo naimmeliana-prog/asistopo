@@ -1,21 +1,41 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { OppositionData } from "../types";
-import { Search, RefreshCw, ExternalLink, MapPin, AlertTriangle, FileText, Loader2, CheckCircle } from "lucide-react";
+import { Search, RefreshCw, ExternalLink, MapPin, AlertTriangle, Sparkles, Loader2, CheckCircle, Clock } from "lucide-react";
+import { generateClientOpposition } from "../lib/clientAiGenerator";
 
 interface RSSItem {
   title: string;
   link: string;
   pubDate: string;
   description: string;
-  pdfUrl?: string;
-  htmlUrl?: string;
 }
 
-interface MaterialFile {
-  label: string;
-  url: string;
-  type: string;
-}
+// Local cache helpers to store recent search results safely (max 30 items)
+const getSearchCache = (): RSSItem[] => {
+  try {
+    const saved = localStorage.getItem("opo_searched_items_cache");
+    return saved ? JSON.parse(saved) : [];
+  } catch (e) {
+    console.warn("Error parsing search cache", e);
+    return [];
+  }
+};
+
+const saveToSearchCache = (items: RSSItem[]) => {
+  try {
+    const current = getSearchCache();
+    const merged = [...items];
+    current.forEach(oldItem => {
+      const exists = merged.some(m => m.title.trim().toLowerCase() === oldItem.title.trim().toLowerCase());
+      if (!exists && merged.length < 30) {
+        merged.push(oldItem);
+      }
+    });
+    localStorage.setItem("opo_searched_items_cache", JSON.stringify(merged.slice(0, 30)));
+  } catch (e) {
+    console.warn("Error saving to search cache", e);
+  }
+};
 
 interface OppositionSearcherProps {
   onSelectOpposition: (id: string) => void;
@@ -36,18 +56,13 @@ export default function OppositionSearcher({
   const [loadingRss, setLoadingRss] = useState(false);
   const [rssError, setRssError] = useState("");
   const [isOfflineMode, setIsOfflineMode] = useState(false);
-  const [selectedItemForMaterials, setSelectedItemForMaterials] = useState<RSSItem | null>(null);
-  const [materialFiles, setMaterialFiles] = useState<MaterialFile[]>([]);
-  const [materialTitle, setMaterialTitle] = useState<string | null>(null);
-  const [loadingMaterials, setLoadingMaterials] = useState(false);
-  const [materialError, setMaterialError] = useState<string | null>(null);
-  
-  // Filter state
-  const [showFilters, setShowFilters] = useState(false);
-  const [selectedScope, setSelectedScope] = useState<string>("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [dateFrom, setDateFrom] = useState<string>("");
-  const [currentPage, setCurrentPage] = useState(1);
+
+  // Controller ref to abort previous in-flight requests on new keystrokes
+  const activeControllerRef = useRef<AbortController | null>(null);
+
+  // Custom opposition import state
+  const [importingTitle, setImportingTitle] = useState<string | null>(null);
+  const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
 
   // Accent and diacritic-insensitive normalization for Spanish searches
   const normalizeString = (str: string): string => {
@@ -57,132 +72,151 @@ export default function OppositionSearcher({
       .replace(/[\u0300-\u036f]/g, "");
   };
 
-  const buildCustomOppositionFromItem = (item: RSSItem): OppositionData => {
-    const title = item.title || "Oposición oficial BOE";
-    const normalizedTitle = title.replace(/\s+/g, " ").trim();
-    const titleLower = normalizedTitle.toLowerCase();
-    const shortName = normalizedTitle.length > 60 ? `${normalizedTitle.slice(0, 57).trim()}...` : normalizedTitle;
-
-    const adminType: OppositionData["adminType"] = titleLower.includes("ayuntamiento") || titleLower.includes("municipio") || titleLower.includes("local")
-      ? "Local"
-      : titleLower.includes("comunidad") || titleLower.includes("generalitat") || titleLower.includes("junta")
-      ? "Autonómica"
-      : "Estatal";
-
-    const group = titleLower.includes("a1")
-      ? "A1"
-      : titleLower.includes("a2")
-      ? "A2"
-      : titleLower.includes("c1")
-      ? "C1"
-      : titleLower.includes("c2")
-      ? "C2"
-      : "C2";
-
-    return {
-      id: item.link,
-      name: normalizedTitle,
-      shortName,
-      group,
-      adminType,
-      region: "España",
-      status: "Abierto",
-      generalRequirements: [],
-      tribunalQualities: [],
-      card: {
-        vacancies: 0,
-        scale: "N/A",
-        deadline: "Consulta el BOE oficial",
-        referenceBOE: item.link,
-        officialLink: item.link,
-        place: "N/A",
-        examType: "Convocatoria oficial BOE",
-        minDegree: "N/A",
-        legislativeWarning: "Consulta el BOE oficial para los detalles específicos.",
-      },
-      syllabus: [],
-      officialExams: [],
-      practicalCases: [],
-    };
-  };
-
-  const handleFetchOfficialMaterials = async (item: RSSItem) => {
-    setSelectedItemForMaterials(item);
-    setMaterialFiles([]);
-    setMaterialError(null);
-    setLoadingMaterials(true);
-
-    try {
-      const response = await fetch(`/api/boe-material?link=${encodeURIComponent(item.link)}`);
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.error || "No se pudo obtener el material oficial.");
-      }
-
-      const data = await response.json();
-      setMaterialTitle(data.title || item.title);
-      setMaterialFiles(Array.isArray(data.materialFiles) ? data.materialFiles : []);
-      
-      // IMPORTANT: Register the opposition from BOE search result as active
-      // Use the BOE link as the unique ID for this opposition
-      const boeLinkId = item.link;
-      const customOpposition = buildCustomOppositionFromItem(item);
-      onAddCustomOpposition(customOpposition);
-      onSelectOpposition(boeLinkId);
-    } catch (error: any) {
-      console.error(error);
-      setMaterialError(error.message || "No se pudo cargar el material oficial.");
-    } finally {
-      setLoadingMaterials(false);
+  const getItemStatus = (pubDateStr: string) => {
+    if (!pubDateStr) return { label: "BOE Oficial", color: "bg-slate-100 text-slate-700 border-slate-200" };
+    const pubDate = new Date(pubDateStr);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - pubDate.getTime()) / (1000 * 3600 * 24));
+    
+    if (isNaN(diffDays) || diffDays < 0) {
+      return { label: "Plazo Reciente / Vigente", color: "bg-emerald-100 text-emerald-800 border-emerald-300" };
+    }
+    
+    if (diffDays <= 30) {
+      return { label: "Plazo Abierto / Reciente", color: "bg-emerald-100 text-emerald-800 border-emerald-300" };
+    } else if (diffDays <= 60) {
+      return { label: "En Tramitación", color: "bg-amber-100 text-amber-800 border-amber-300" };
+    } else {
+      const dateFormatted = pubDate.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" });
+      return { label: `Publicado (${dateFormatted})`, color: "bg-slate-100 text-slate-600 border-slate-200" };
     }
   };
 
-  const fetchRssFeed = async (searchQuery: any = "", page: number = 1, fetchMultiplePages: boolean = false) => {
-    setLoadingRss(true);
-    setRssError("");
+  const handleImportOpposition = async (item: RSSItem) => {
+    setImportingTitle(item.title);
+    setImportSuccessMessage(null);
     try {
-      const actualQuery = typeof searchQuery === "string" ? searchQuery.trim() : searchTerm.trim();
-      
-      let allFetchedItems: RSSItem[] = [];
-      
-      // If user wants comprehensive search, fetch multiple pages
-      const maxPages = fetchMultiplePages ? 5 : 1; // Fetch up to 5 pages for comprehensive search
-      
-      for (let pageNum = page; pageNum < page + maxPages; pageNum++) {
-        const params = new URLSearchParams();
-        if (actualQuery) params.append("q", actualQuery);
-        if (selectedScope) params.append("scope", selectedScope);
-        if (selectedCategory) params.append("category", selectedCategory);
-        if (dateFrom) params.append("dateFrom", dateFrom);
-        if (pageNum > 1) params.append("page", pageNum.toString());
-        
-        const url = `/api/boe-rss?${params.toString()}`;
-        
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error("No se pudo obtener el feed de BOE.");
+      let data: any = null;
+      try {
+        const response = await fetch("/api/gemini/generate-custom-opposition", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: item.title, description: item.description }),
+        });
+        if (response.ok) {
+          data = await response.json();
         }
-        const data = await response.json();
-        let fetchedItems: RSSItem[] = [];
-        if (data && Array.isArray(data.items)) {
-          fetchedItems = data.items;
-        }
-        
-        // Add to all items
-        allFetchedItems = [...allFetchedItems, ...fetchedItems];
-        
-        // If this page had fewer items than 50, no point fetching more
-        if (fetchedItems.length < 50) {
-          break;
-        }
+      } catch (apiErr) {
+        console.warn("Backend API not reachable. Using client-side AI generator.", apiErr);
+      }
+
+      // If backend fails, use client-side generator to guarantee 100% operation
+      if (!data) {
+        data = generateClientOpposition(item.title, item.description);
       }
       
-      setRssItems(allFetchedItems);
-      setCurrentPage(page);
+      if (!data.id) {
+        data.id = normalizeString(item.title)
+          .replace(/[^a-zA-Z0-9\s-]/g, "")
+          .trim()
+          .replace(/\s+/g, "-")
+          .toLowerCase()
+          .slice(0, 50);
+      }
+      
+      onAddCustomOpposition(data);
+      setImportSuccessMessage(`¡Éxito! "${data.shortName || data.name}" se ha añadido al Catálogo y se ha seleccionado automáticamente para su estudio.`);
+      
+      // Auto-select immediately
+      onSelectOpposition(data.id);
+      
+      // Clear success message after 5 seconds
+      setTimeout(() => {
+        setImportSuccessMessage(null);
+      }, 5000);
     } catch (err: any) {
-      console.error("Error fetching BOE data:", err);
-      setRssError("No se pudo obtener resultados desde el BOE. Comprueba tu conexión o intenta otra consulta.");
-      setRssItems([]);
+      console.error(err);
+      alert("Hubo un error al generar la oposición: " + err.message);
+    } finally {
+      setImportingTitle(null);
+    }
+  };
+
+  const fetchRssFeed = async (searchQuery: any = "") => {
+    // Abort any existing in-flight request
+    if (activeControllerRef.current) {
+      activeControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    activeControllerRef.current = controller;
+
+    setLoadingRss(true);
+    setRssError("");
+    const actualQuery = typeof searchQuery === "string" ? searchQuery.trim() : searchTerm.trim();
+
+    try {
+      const url = actualQuery
+        ? `/api/boe-rss?q=${encodeURIComponent(actualQuery)}`
+        : "/api/boe-rss";
+      
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) {
+        throw new Error("No se pudo conectar con el servidor backend de BOE.");
+      }
+      const data = await response.json();
+      setIsOfflineMode(false);
+      
+      let fetchedItems: RSSItem[] = [];
+      if (data && Array.isArray(data.items)) {
+        fetchedItems = data.items;
+      }
+      
+      setRssItems(fetchedItems);
+      if (fetchedItems.length > 0) {
+        saveToSearchCache(fetchedItems);
+      }
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        // Silently return if aborted by a new typed search term
+        return;
+      }
+      console.warn("API Error, utilizing client-side fallback mode:", err);
+      setIsOfflineMode(true);
+      
+      // Client-side fallback: Match catalog oppositions + cached BOE searches
+      const cache = getSearchCache();
+      const normQuery = normalizeString(actualQuery);
+      
+      let fallbackList: RSSItem[] = [];
+
+      // 1. Filter local cache
+      if (normQuery) {
+        fallbackList = cache.filter(item => 
+          normalizeString(item.title).includes(normQuery) || 
+          normalizeString(item.description).includes(normQuery)
+        );
+      } else {
+        fallbackList = [...cache];
+      }
+
+      // 2. Add matching items from local catalog
+      if (allOppositions && allOppositions.length > 0) {
+        allOppositions.forEach(opp => {
+          if (!normQuery || normalizeString(opp.name).includes(normQuery) || normalizeString(opp.shortName).includes(normQuery) || normalizeString(opp.region).includes(normQuery)) {
+            const exists = fallbackList.some(item => normalizeString(item.title).includes(normalizeString(opp.name)));
+            if (!exists) {
+              fallbackList.push({
+                title: `${opp.name} (${opp.region})`,
+                link: opp.card?.officialLink || "https://www.boe.es/diario_boe/oposiciones.php",
+                pubDate: new Date().toISOString(),
+                description: `Oposición oficial del Catálogo: Plazas ${opp.card?.vacancies || 'Convocadas'}. Grupo ${opp.group}. ${opp.generalRequirements?.[0] || ''}`
+              });
+            }
+          }
+        });
+      }
+
+      setRssItems(fallbackList);
     } finally {
       setLoadingRss(false);
     }
@@ -190,12 +224,19 @@ export default function OppositionSearcher({
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
-      fetchRssFeed(searchTerm, 1);
-    }, 600); // 600ms debounce
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm, selectedScope, selectedCategory, dateFrom]);
+      fetchRssFeed(searchTerm);
+    }, 400); // 400ms debounce
+    return () => {
+      clearTimeout(delayDebounceFn);
+      if (activeControllerRef.current) {
+        activeControllerRef.current.abort();
+      }
+    };
+  }, [searchTerm]);
 
-  const filteredRssItems = rssItems;
+  const filteredRssItems = useMemo(() => {
+    return rssItems;
+  }, [rssItems]);
 
   return (
     <div id="opposition-searcher" className="space-y-6">
@@ -244,111 +285,14 @@ export default function OppositionSearcher({
             </div>
             <button
               id="btn-refresh-rss"
-              onClick={() => fetchRssFeed(searchTerm, 1, false)}
+              onClick={() => fetchRssFeed(searchTerm)}
               disabled={loadingRss}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 h-10 shrink-0 cursor-pointer disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loadingRss ? "animate-spin" : ""}`} />
               Buscar en Boletines
             </button>
-            <button
-              onClick={() => fetchRssFeed(searchTerm, 1, true)}
-              disabled={loadingRss}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 h-10 shrink-0 cursor-pointer disabled:opacity-50"
-              title="Busca en múltiples páginas para obtener más resultados"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loadingRss ? "animate-spin" : ""}`} />
-              Búsqueda Exhaustiva
-            </button>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 h-10 shrink-0 cursor-pointer"
-            >
-              ⚙️ Filtros
-            </button>
           </div>
-
-          {/* Filters Section */}
-          {showFilters && (
-            <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Scope Filter */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Ámbito
-                  </label>
-                  <select
-                    value={selectedScope}
-                    onChange={(e) => {
-                      setSelectedScope(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  >
-                    <option value="">Todos los ámbitos</option>
-                    <option value="nacional">Nacional (Estado)</option>
-                    <option value="autonomico">Autonómico</option>
-                    <option value="local">Local (Municipios)</option>
-                  </select>
-                </div>
-
-                {/* Category Filter */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Categoría/Grupo
-                  </label>
-                  <select
-                    value={selectedCategory}
-                    onChange={(e) => {
-                      setSelectedCategory(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  >
-                    <option value="">Todos los grupos</option>
-                    <option value="A1">Grupo A1 (Licenciados)</option>
-                    <option value="A2">Grupo A2 (Diplomados)</option>
-                    <option value="C1">Grupo C1 (Técnicos)</option>
-                    <option value="C2">Grupo C2 (Auxiliares)</option>
-                  </select>
-                </div>
-
-                {/* Date Filter */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Desde fecha
-                  </label>
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => {
-                      setDateFrom(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              {/* Clear Filters */}
-              {(selectedScope || selectedCategory || dateFrom) && (
-                <div className="flex gap-2 justify-end">
-                  <button
-                    onClick={() => {
-                      setSelectedScope("");
-                      setSelectedCategory("");
-                      setDateFrom("");
-                      setCurrentPage(1);
-                      fetchRssFeed(searchTerm, 1);
-                    }}
-                    className="px-3 py-1.5 text-xs bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all"
-                  >
-                    Limpiar filtros
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
 
           {rssError && (
             <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center gap-2">
@@ -357,6 +301,13 @@ export default function OppositionSearcher({
             </div>
           )}
         </div>
+
+        {importSuccessMessage && (
+          <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs flex items-start gap-3 shadow-xs">
+            <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+            <span className="font-semibold leading-relaxed">{importSuccessMessage}</span>
+          </div>
+        )}
 
         <div className="w-full space-y-4">
           <div className="flex items-center justify-between">
@@ -368,7 +319,7 @@ export default function OppositionSearcher({
           {loadingRss ? (
             <div className="p-10 text-center bg-white border border-gray-100 rounded-2xl space-y-3">
               <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
-              <p className="text-xs text-gray-500 font-medium font-sans">Consultando convocatorias oficiales en tiempo real desde el BOE...</p>
+              <p className="text-xs text-gray-500 font-medium font-sans">Buscando convocatorias reales en el Boletín Oficial del Estado (BOE)...</p>
             </div>
           ) : filteredRssItems.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -380,86 +331,68 @@ export default function OppositionSearcher({
                 const badgeText = isSanidad ? "Sanidad" : isPolicia ? "Seguridad" : isHacienda ? "Administración" : "Empleo Público";
                 const badgeColor = isSanidad ? "bg-cyan-100 text-cyan-800" : isPolicia ? "bg-amber-100 text-amber-800" : isHacienda ? "bg-indigo-100 text-indigo-800" : "bg-emerald-100 text-emerald-800";
 
+                const statusInfo = getItemStatus(item.pubDate);
+
                 return (
                   <div
                     key={index}
                     id={`rss-card-${index}`}
-                    className="p-5 bg-white border border-gray-100 hover:border-gray-200 rounded-2xl shadow-xs hover:shadow-xs transition-all space-y-3"
+                    className="p-5 bg-white border border-gray-100 hover:border-indigo-200 rounded-2xl shadow-xs hover:shadow-md transition-all space-y-3 flex flex-col justify-between"
                   >
-                    <div className="flex justify-between items-start gap-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${badgeColor} uppercase tracking-wider`}>
-                            {badgeText}
-                          </span>
-                          <span className="text-[10px] text-gray-400 font-semibold">
-                            {item.pubDate ? new Date(item.pubDate).toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" }) : "Fecha reciente"}
-                          </span>
-                        </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${badgeColor} uppercase tracking-wider`}>
+                          {badgeText}
+                        </span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${statusInfo.color} flex items-center gap-1`}>
+                          <Clock className="w-3 h-3" />
+                          {statusInfo.label}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-start gap-3">
                         <h4 className="text-sm font-extrabold text-slate-900 leading-snug">
                           {item.title}
                         </h4>
+                        <a
+                          href={item.link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 rounded-lg border border-slate-200 hover:border-indigo-200 transition-all cursor-pointer shrink-0"
+                          title="Ver publicación oficial en el BOE"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
                       </div>
-                      <a
-                        href={item.link}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 rounded-lg border border-slate-200 hover:border-indigo-200 transition-all cursor-pointer shrink-0"
-                        title="Ver boletín original"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    </div>
-                    {item.description && (
-                      <p className="text-xs text-slate-600 leading-relaxed bg-slate-50/50 p-3.5 rounded-xl border border-slate-100">
-                        {item.description}
-                      </p>
-                    )}
-
-                    <div className="flex flex-col gap-3 pt-2 border-t border-gray-50">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="text-[10px] text-gray-400 font-semibold italic flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                          BOE / Boletín Oficial
-                        </span>
-                        <div className="flex flex-wrap gap-2">
-                          <a
-                            href={item.link}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] rounded-xl border border-slate-200 transition-all"
-                          >
-                            Abrir convocatoria oficial
-                          </a>
-                          <button
-                            id={`btn-materials-${index}`}
-                            onClick={() => handleFetchOfficialMaterials(item)}
-                            disabled={loadingMaterials && selectedItemForMaterials?.link === item.link}
-                            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-[10px] rounded-xl transition-all flex items-center gap-1"
-                          >
-                            {loadingMaterials && selectedItemForMaterials?.link === item.link ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                            ) : (
-                              <FileText className="w-3.5 h-3.5 text-white" />
-                            )}
-                            <span>{selectedItemForMaterials?.link === item.link ? "Actualizando material" : "Ver material oficial"}</span>
-                          </button>
-                        </div>
-                      </div>
-                      {(item.pdfUrl || item.htmlUrl) && (
-                        <div className="text-[10px] text-slate-500 space-y-1">
-                          {item.pdfUrl && (
-                            <a href={item.pdfUrl} target="_blank" rel="noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">
-                              Descargar documento oficial en PDF
-                            </a>
-                          )}
-                          {item.htmlUrl && item.htmlUrl !== item.link && (
-                            <a href={item.htmlUrl} target="_blank" rel="noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">
-                              Abrir versión HTML completa
-                            </a>
-                          )}
-                        </div>
+                      {item.description && (
+                        <p className="text-xs text-slate-600 leading-relaxed bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                          {item.description}
+                        </p>
                       )}
+                    </div>
+                    
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-50 flex-wrap gap-2">
+                      <span className="text-[10px] text-gray-400 font-semibold italic flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                        BOE / Diario Oficial
+                      </span>
+                      <button
+                        id={`btn-import-opo-${index}`}
+                        disabled={importingTitle !== null}
+                        onClick={() => handleImportOpposition(item)}
+                        className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-xs hover:shadow-sm disabled:cursor-not-allowed"
+                      >
+                        {importingTitle === item.title ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                            <span>Analizando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5 text-indigo-200 animate-pulse" />
+                            <span>Estudiar con IA</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
                 );
@@ -471,7 +404,7 @@ export default function OppositionSearcher({
               <div>
                 <h4 className="text-sm font-extrabold text-slate-900">No se encontraron convocatorias</h4>
                 <p className="text-[11px] text-slate-500 leading-normal mt-0.5">
-                  Realiza una búsqueda escribiendo palabras clave como "Justicia", "Auxiliar", "Madrid", etc., para buscar en tiempo real en los boletines oficiales.
+                  Escribe términos como "Justicia", "Auxiliar", "Sanidad", "Policía", o limpia el campo para ver las convocatorias más recientes del BOE.
                 </p>
               </div>
               {searchTerm && (
@@ -483,45 +416,8 @@ export default function OppositionSearcher({
                   }}
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer transition-all inline-block"
                 >
-                  Limpiar búsqueda y mostrar recientes
+                  Limpiar búsqueda y ver recientes
                 </button>
-              )}
-            </div>
-          )}
-
-          {selectedItemForMaterials && (
-            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">Material oficial para</h3>
-                  <p className="text-xs text-slate-500">{materialTitle || selectedItemForMaterials.title}</p>
-                </div>
-                <a href={selectedItemForMaterials.link} target="_blank" rel="noreferrer" className="text-[10px] uppercase font-semibold text-indigo-600 hover:text-indigo-800">
-                  Abrir página oficial
-                </a>
-              </div>
-
-              {materialError && (
-                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs">
-                  {materialError}
-                </div>
-              )}
-
-              {!materialError && materialFiles.length === 0 && !loadingMaterials && (
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
-                  No se encontraron documentos oficiales descargables en la página. Abre la convocatoria oficial para acceder al temario completo y exámenes anteriores publicados por el BOE.
-                </div>
-              )}
-
-              {materialFiles.length > 0 && (
-                <div className="space-y-3 text-xs text-slate-700">
-                  {materialFiles.map((file, idx) => (
-                    <a key={idx} href={file.url} target="_blank" rel="noreferrer" className="block p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all">
-                      <div className="font-semibold text-slate-900">{file.label}</div>
-                      <div className="text-[10px] text-slate-500">Tipo: {file.type.toUpperCase()}</div>
-                    </a>
-                  ))}
-                </div>
               )}
             </div>
           )}

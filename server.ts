@@ -8,7 +8,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = parseInt(process.env.PORT || "3000", 10);
+const PORT = 3000;
 
 app.use(express.json({ limit: "10mb" }));
 
@@ -195,85 +195,144 @@ function cleanXmlText(str: string): string {
     .trim();
 }
 
-// Helper function to fetch real search results from the BOE search page and parse HTML results
-async function fetchBoeRealSearch(query: string): Promise<any[]> {
+// Helper function to fetch BOE's official live RSS feed (channel 2b - oposiciones)
+async function fetchBoeOfficialRss(): Promise<any[]> {
   try {
-    const normalizedQuery = query.trim() || "oposiciones";
-    const searchQuery = normalizedQuery.toLowerCase().includes("oposicion")
-      ? normalizedQuery
-      : `${normalizedQuery} oposiciones`;
-
-    const params = new URLSearchParams({
-      accion: "Buscar",
-      bd: "boe",
-      texto: searchQuery,
+    const url = "https://www.boe.es/rss/canal.php?c=oposiciones";
+    console.log("Fetching official BOE RSS feed from:", url);
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/rss+xml, application/xml, text/xml, */*"
+      }
     });
 
-    const url = `https://www.boe.es/buscar/redirector.php?${params.toString()}`;
+    if (!response.ok) return [];
+    const xmlText = await response.text();
+    const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+    const items: any[] = [];
+    let match;
 
+    while ((match = itemRegex.exec(xmlText)) !== null) {
+      const content = match[1];
+      const titleMatch = content.match(/<title>([\s\S]*?)<\/title>/i);
+      const linkMatch = content.match(/<link>([\s\S]*?)<\/link>/i);
+      const pubDateMatch = content.match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
+      const descMatch = content.match(/<description>([\s\S]*?)<\/description>/i);
+
+      let title = titleMatch ? cleanXmlText(titleMatch[1]) : "";
+      let link = linkMatch ? cleanXmlText(linkMatch[1]) : "https://www.boe.es/diario_boe/oposiciones.php";
+      let pubDateRaw = pubDateMatch ? pubDateMatch[1].trim() : "";
+      let description = descMatch ? cleanXmlText(descMatch[1]) : "";
+
+      let pubDate = new Date().toISOString();
+      if (pubDateRaw) {
+        const parsed = new Date(pubDateRaw);
+        if (!isNaN(parsed.getTime())) {
+          pubDate = parsed.toISOString();
+        }
+      }
+
+      if (title) {
+        items.push({
+          title,
+          link,
+          pubDate,
+          description: description || `Convocatoria oficial reciente publicada en el Boletín Oficial del Estado (BOE).`
+        });
+      }
+    }
+
+    return items;
+  } catch (err) {
+    console.error("Error fetching official BOE RSS:", err);
+    return [];
+  }
+}
+
+// Helper function to fetch real search results from the BOE XML search engine
+async function fetchBoeRealSearch(query: string): Promise<any[]> {
+  try {
+    let url = "";
+    if (query.trim()) {
+      // Use BOE's XML search engine to query Section II.B (Oposiciones y concursos) by Title matching the keyword.
+      // We keep the keys unencoded (with literal brackets) as the legacy BOE server rejects percent-encoded brackets with a 400 Bad Request error.
+      const encodedQuery = encodeURIComponent(query.trim());
+      url = `https://www.boe.es/buscar/xml.php?campo[0]=TIT&dato[0]=${encodedQuery}&operador[0]=and&campo[1]=SEC&dato[1]=2b`;
+    } else {
+      url = `https://www.boe.es/buscar/xml.php?campo[0]=SEC&dato[0]=2b`;
+    }
     console.log("Fetching real BOE search from URL:", url);
     const response = await fetch(url, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      },
+        "Accept": "application/xml, text/xml, */*"
+      }
     });
 
     if (!response.ok) {
       throw new Error(`BOE HTTP error! status: ${response.status}`);
     }
 
-    const html = await response.text();
-    const itemRegex = /<li class="resultado-busqueda">([\s\S]*?)<\/li>/gi;
+    const xmlText = await response.text();
+    
+    // Parse the XML text to extract <documento> tags
+    const documentoRegex = /<documento>([\s\S]*?)<\/documento>/gi;
     const items: any[] = [];
     let match;
 
-    while ((match = itemRegex.exec(html)) !== null) {
-      const itemHtml = match[1];
-      const lineDemMatch = itemHtml.match(/<p class="linea-dem">([\s\S]*?)<\/p>/i);
-      const linePubMatch = itemHtml.match(/<p class="linea-pub">([\s\S]*?)<\/p>/i);
-      const descriptionMatch = itemHtml.match(/<p>([\s\S]*?)<\/p>/i);
-      const linkMatch = itemHtml.match(/href="([^"]*\b(?:doc|act)\.php\?id=[^"]+)"/i);
+    while ((match = documentoRegex.exec(xmlText)) !== null) {
+      const docContent = match[1];
+      
+      const idMatch = docContent.match(/<id>([\s\S]*?)<\/id>/i);
+      const tituloMatch = docContent.match(/<titulo>([\s\S]*?)<\/titulo>/i);
+      const urlHtmlMatch = docContent.match(/<url_html>([\s\S]*?)<\/url_html>/i);
+      const urlPdfMatch = docContent.match(/<url_pdf>([\s\S]*?)<\/url_pdf>/i);
+      const fechaMatch = docContent.match(/<fecha_publicacion>([\s\S]*?)<\/fecha_publicacion>/i);
 
-      const lineDem = lineDemMatch ? cleanXmlText(lineDemMatch[1]) : "";
-      const linePub = linePubMatch ? cleanXmlText(linePubMatch[1]) : "";
-      const description = descriptionMatch ? cleanXmlText(descriptionMatch[1]) : "";
-      const relativeLink = linkMatch ? linkMatch[1].trim() : "";
-      const link = relativeLink
-        ? relativeLink.startsWith("http")
-          ? relativeLink
-          : `https://www.boe.es${relativeLink.startsWith("/") ? "" : "/"}${relativeLink.replace(/^(\.\.)?\//, "")}`
-        : "";
+      const id = idMatch ? idMatch[1].trim() : "";
+      let title = tituloMatch ? tituloMatch[1].trim() : "";
+      title = cleanXmlText(title);
 
-      let title = description || lineDem || linePub;
-      if (title) {
-        title = title.replace(/\s+/g, " ").trim();
+      const rawUrlHtml = urlHtmlMatch ? urlHtmlMatch[1].trim() : "";
+      const rawUrlPdf = urlPdfMatch ? urlPdfMatch[1].trim() : "";
+      
+      // Build absolute URLs
+      let link = "https://www.boe.es/diario_boe/oposiciones.php";
+      if (rawUrlHtml) {
+        link = rawUrlHtml.startsWith("http") ? rawUrlHtml : `https://www.boe.es${rawUrlHtml}`;
+      } else if (rawUrlPdf) {
+        link = rawUrlPdf.startsWith("http") ? rawUrlPdf : `https://www.boe.es${rawUrlPdf}`;
       }
 
+      // Convert fecha_publicacion (YYYYMMDD like 20260718) to ISO
       let pubDate = new Date().toISOString();
-      if (linePub) {
-        const pubDateMatch = linePub.match(/(\d{2}\/\d{2}\/\d{4})/);
-        if (pubDateMatch) {
-          const [day, month, year] = pubDateMatch[1].split("/");
-          pubDate = `${year}-${month}-${day}T08:00:00Z`;
-        }
+      const dateStr = fechaMatch ? fechaMatch[1].trim() : "";
+      if (dateStr && dateStr.length === 8) {
+        const year = dateStr.substring(0, 4);
+        const month = dateStr.substring(4, 6);
+        const day = dateStr.substring(6, 8);
+        pubDate = `${year}-${month}-${day}T08:00:00Z`;
       }
 
-      const descriptionParts = [lineDem, linePub, description].filter((part) => part && part.trim());
-      const uniqueDescriptionParts = Array.from(new Set(descriptionParts));
-      const fullDescription = uniqueDescriptionParts.join(" | ").trim();
+      const formattedDate = dateStr && dateStr.length === 8 
+        ? `${dateStr.substring(6, 8)}/${dateStr.substring(4, 6)}/${dateStr.substring(0, 4)}` 
+        : "recientemente";
+        
+      const description = `Convocatoria oficial de empleo público (oposiciones) publicada en el Boletín Oficial del Estado (BOE) el ${formattedDate} con código de referencia ${id}. Contiene las bases completas, plazos y requisitos del proceso selectivo oficial.`;
 
-      if (title && link) {
+      if (title) {
         items.push({
-          id: link,
           title,
           link,
           pubDate,
-          description: fullDescription || "Convocatoria oficial de empleo público publicada en el BOE.",
-          htmlUrl: link,
+          description
         });
       }
     }
+
+    // Always sort by publication date descending (newest publications first)
+    items.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
 
     console.log(`Successfully parsed ${items.length} real BOE convocatorias for query "${query}"`);
     return items;
@@ -287,44 +346,19 @@ async function fetchBoeRealSearch(query: string): Promise<any[]> {
 app.get("/api/boe-rss", async (req: Request, res: Response) => {
   const query = (req.query.q as string || "").trim();
   try {
-    // 1. ALWAYS query the live official BOE XML Search API as the primary source first
+    // 1. If query is empty, prioritize BOE's live official RSS feed channel (today/recent publications)
+    if (!query) {
+      const officialRssItems = await fetchBoeOfficialRss();
+      if (officialRssItems && officialRssItems.length > 0) {
+        res.json({ items: officialRssItems });
+        return;
+      }
+    }
+
+    // 2. Query the live official BOE XML Search API
     let items = await fetchBoeRealSearch(query);
-    
-    // 2. FILTER OUT OBVIOUS NON-OPPOSITION NOISE
-    items = items.filter(item => {
-      const titleLC = item.title.toLowerCase();
-      const descLC = item.description.toLowerCase();
-      
-      // STRONG EXCLUSIONS: These are definitely NOT opposition convocatorias
-      if (titleLC.includes("relación definitiva") || 
-          titleLC.includes("relación de admitidos") ||
-          titleLC.includes("relación de aprobados") ||
-          descLC.includes("relación definitiva") ||
-          descLC.includes("relación de admitidos")) {
-        return false; // This is NOT a convocatoria, it's a results list
-      }
-      
-      // Exclude tribunal calificador articles (judge appointment notifications)
-      if ((titleLC + descLC).includes("tribunal calificador") && 
-          !(titleLC + descLC).includes("convocatoria")) {
-        return false;
-      }
-      
-      // Exclude errata / corrections
-      if (titleLC.includes("errata") || titleLC.includes("fe de erratas") || descLC.includes("errata") || descLC.includes("fe de erratas")) {
-        return false;
-      }
-      
-      // Exclude other public-administration indirect notices that are not opposition records
-      if (titleLC.includes("becas") || titleLC.includes("ayudas") || titleLC.includes("prestación") || titleLC.includes("prestaciones") || titleLC.includes("planificación") || titleLC.includes("planificacion")) {
-        return false;
-      }
-      
-      return true;
-    });
-    
     if (query) {
-      // 3. Apply keyword matching for user's search query
+      // Apply strict keyword matching to prevent BOE's general fallback list from polluting custom queries
       items = items.filter(item => matchesQuery(item.title, item.description, query));
     }
 
@@ -333,92 +367,56 @@ app.get("/api/boe-rss", async (req: Request, res: Response) => {
       return;
     }
 
-    // No fallback to AI or local repositories: return only official BOE results.
-    console.log("No items from direct BOE search for query.");
-    res.json({ items: [] });
+    // 3. Check official RSS channel as secondary fallback for keyword matches
+    const officialRssItems = await fetchBoeOfficialRss();
+    if (officialRssItems && officialRssItems.length > 0) {
+      const filteredRss = query 
+        ? officialRssItems.filter(item => matchesQuery(item.title, item.description, query))
+        : officialRssItems;
+      if (filteredRss.length > 0) {
+        res.json({ items: filteredRss });
+        return;
+      }
+    }
+
+    // 4. Fall back to Gemini/OpenRouter Web Grounding if direct search didn't yield items
+    console.log("No items from direct BOE search, attempting AI Grounding fallback...");
+    let prompt = `La persona está buscando convocatorias de oposiciones o empleo público en España (BOE y diarios autonómicos oficiales) relacionadas con la palabra clave: "${query}".
+Utiliza tu herramienta de búsqueda web para buscar de manera real convocatorias oficiales de empleo público recientes o vigentes en España en el Boletín Oficial del Estado (BOE) o boletines autonómicos (como BOCM, DOGV, BOJA, etc.) que coincidan con "${query}".
+
+Devuelve una lista de convocatorias de empleo público REALES que hayas encontrado en la búsqueda web reciente.
+
+REGLAS CRÍTICAS:
+1. NO inventes convocatorias falsas. Las convocatorias deben ser reales y obtenidas de las fuentes oficiales recientes.
+2. Si para el término de búsqueda "${query}" no se encuentran resultados reales recientes o vigentes, devuelve una lista vacía.
+3. El enlace "link" debe ser el enlace web oficial real (por ejemplo, https://www.boe.es/... u otro portal oficial autonómico).
+4. Devuelve los resultados únicamente en este formato JSON exacto:
+{
+  "items": [
+    {
+      "title": "Nombre Oficial Formal de la Convocatoria de Empleo Público",
+      "link": "https://www.boe.es/diario_boe/oposiciones.php",
+      "pubDate": "Fecha de publicación en formato ISO (ej: 2026-07-15T00:00:00Z)",
+      "description": "Resumen riguroso y real de la convocatoria, detallando el número de plazas, organismo emisor, grupo de titulación y plazos de inscripción."
+    }
+  ]
+}
+
+No agregues explicaciones fuera del JSON. Devuelve únicamente el objeto JSON.`;
+
+    const text = await generateAISchema({
+      prompt,
+      systemInstruction: "Eres un buscador y agregador en tiempo real de convocatorias de empleo público (oposiciones) reales de España (BOE y boletines autonómicos oficiales). Utilizas la búsqueda web para recopilar únicamente convocatorias de empleo público verídicas y las formateas exactamente como un objeto JSON según el esquema especificado.",
+      responseMimeType: "application/json",
+      useSearch: true
+    });
+
+    const data = JSON.parse(text);
+    const geminiItems = data.items || [];
+    res.json({ items: geminiItems });
   } catch (error: any) {
     console.error("Error in /api/boe-rss:", error);
     res.json({ items: [] });
-  }
-});
-
-// API endpoint to fetch official BOE materials linked from a convocatoria
-app.get("/api/boe-material", async (req: Request, res: Response) => {
-  const link = (req.query.link as string || "").trim();
-  if (!link) {
-    res.status(400).json({ error: "No se ha especificado el enlace oficial de la convocatoria." });
-    return;
-  }
-
-  try {
-    const normalizedLink = link;
-    const pdfMatch = normalizedLink.match(/\.(pdf|docx?|zip|xlsm?)(\?.*)?$/i);
-    if (pdfMatch) {
-      res.json({
-        title: "Documento oficial",
-        materialFiles: [
-          {
-            label: "Documento oficial descargable",
-            url: normalizedLink,
-            type: pdfMatch[1].toLowerCase(),
-          },
-        ],
-      });
-      return;
-    }
-
-    const response = await fetch(normalizedLink, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`BOE page HTTP error: ${response.status}`);
-    }
-
-    const html = await response.text();
-    const titleMatch = html.match(/<title>([\s\S]*?)<\/title>/i);
-    const pageTitle = titleMatch ? titleMatch[1].trim() : "Convocatoria oficial";
-
-    const fileLinks: { label: string; url: string; type: string }[] = [];
-    const anchorRegex = /<a[^>]+href=(?:"|')([^"']+)(?:"|')[^>]*>([\s\S]*?)<\/a>/gi;
-    let anchorMatch;
-    while ((anchorMatch = anchorRegex.exec(html)) !== null) {
-      const url = anchorMatch[1];
-      const text = anchorMatch[2].replace(/<[^>]*>/g, "").trim();
-      const normalizedUrl = url.startsWith("http") ? url : (url.startsWith("/") ? `https://www.boe.es${url}` : url);
-      const extMatch = normalizedUrl.match(/\.(pdf|docx?|zip|xlsm?)(\?.*)?$/i);
-      if (extMatch) {
-        const type = extMatch[1].toLowerCase();
-        const label = text || `Documento oficial (${type.toUpperCase()})`;
-        if (!fileLinks.some((item) => item.url === normalizedUrl)) {
-          fileLinks.push({ label, url: normalizedUrl, type });
-        }
-      }
-    }
-
-    if (fileLinks.length === 0) {
-      // Fallback: search for direct PDF urls in the raw HTML even if not inside anchor tags
-      const rawPdfRegex = /(https?:\/\/[^"'\s>]+\.(?:pdf|docx?|zip|xlsm?))(\?[^"'\s>]*)?/gi;
-      let rawMatch;
-      while ((rawMatch = rawPdfRegex.exec(html)) !== null) {
-        const rawUrl = rawMatch[1] + (rawMatch[2] || "");
-        if (!fileLinks.some((item) => item.url === rawUrl)) {
-          const type = rawUrl.match(/\.(pdf|docx?|zip|xlsm?)(\?.*)?$/i)?.[1]?.toLowerCase() || "pdf";
-          fileLinks.push({ label: `Documento oficial (${type?.toUpperCase()})`, url: rawUrl, type });
-        }
-      }
-    }
-
-    res.json({
-      title: pageTitle,
-      materialFiles: fileLinks,
-    });
-  } catch (error: any) {
-    console.error("Error in /api/boe-material:", error);
-    res.status(500).json({ error: "No se pudo obtener el material oficial desde el enlace proporcionado." });
   }
 });
 
@@ -970,9 +968,11 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT} in ${process.env.NODE_ENV || "development"} mode`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT} in ${process.env.NODE_ENV || "development"} mode`);
+    });
+  }
 }
 
 startServer();
